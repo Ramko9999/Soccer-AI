@@ -30,13 +30,10 @@ class PlayerEvent(int, Enum):
     TURN_RIGHT = 1
     RUN = 2
     TOGGLE = 3
+    SHOOT = 4
 
 
-PLAYER_RADIUS = 16
-BALL_RADIUS = 12
-TILT_INDICATOR_RADIUS = PLAYER_RADIUS + 4
-GOAL_SIZE = 100
-GOAL_LINE_X = 620
+FONT_SIZE = 16
 
 
 class BluelockDrillVisualization:
@@ -44,7 +41,7 @@ class BluelockDrillVisualization:
         pygame.init()
         self.drill = drill
         self.toggled_player_id = self.drill.get_players()[0].id
-        self.font = pygame.font.SysFont(None, 16)
+        self.font = pygame.font.SysFont(None, FONT_SIZE)
         self.screen = pygame.display.set_mode((640, 480))
 
     def toggle(self):
@@ -54,25 +51,11 @@ class BluelockDrillVisualization:
 
     def draw_pitch(self):
         self.screen.fill(Color.PITCH)
-        pygame.draw.line(
-            self.screen,
-            Color.WHITE,
-            (GOAL_LINE_X, 0),
-            (GOAL_LINE_X, (self.screen.get_height() - GOAL_SIZE) // 2),
-            width=2,
-        )
-        pygame.draw.line(
-            self.screen,
-            Color.WHITE,
-            (GOAL_LINE_X, (self.screen.get_height() + GOAL_SIZE) // 2),
-            (GOAL_LINE_X, self.screen.get_height()),
-            width=2,
-        )
 
     def draw_player_tilt_indicator(self, player: Player):
         kit = team_to_kit[player.team]
-        indicator_start_pos = player.tilt * (TILT_INDICATOR_RADIUS) + player.position
-        indicator_end_pos = player.tilt * (TILT_INDICATOR_RADIUS + 4) + player.position
+        indicator_start_pos = player.tilt * (player.size + 4) + player.position
+        indicator_end_pos = player.tilt * (player.size + 8) + player.position
         pygame.draw.line(
             self.screen,
             kit.primary,
@@ -82,9 +65,8 @@ class BluelockDrillVisualization:
         )
 
     def draw_toggle_indicator(self, player: Player):
-
         pygame.draw.circle(
-            self.screen, Color.TOGGLE, tuple(player.position), PLAYER_RADIUS + 2
+            self.screen, Color.TOGGLE, tuple(player.position), player.size + 2
         )
 
     def draw_player(self, player: Player):
@@ -93,30 +75,28 @@ class BluelockDrillVisualization:
             self.draw_toggle_indicator(player)
 
         pygame.draw.circle(
-            self.screen, kit.primary, tuple(player.position), PLAYER_RADIUS
+            self.screen, kit.primary, tuple(player.position), player.size
         )
         kit_number = self.font.render(str(player.id), True, kit.number)
         pos_x, pos_y = tuple(player.position)
+
         # todo(Ramko9999): center the kit number within the player
-        self.screen.blit(
-            kit_number, (pos_x - PLAYER_RADIUS / 2, pos_y - PLAYER_RADIUS / 2)
-        )
-        self.draw_player_tilt_indicator(player)
+        self.screen.blit(kit_number, (pos_x - player.size / 2, pos_y - player.size / 2))
+        if player.has_possession(self.drill.get_ball()):
+            self.draw_ball(self.drill.get_ball(), possessor=player)
+        else:
+            self.draw_player_tilt_indicator(player)
 
-    def draw_ball(self, ball: Ball):
+    def draw_ball(self, ball: Ball, possessor: Player | None = None):
         ball_position = ball.position
-        if ball.is_possessed():
-            # todo(Ramko9999): figure out how to decouple the ball's movement when possessed from the visualization
-            ball_position = (
-                ball.possessor.tilt * (TILT_INDICATOR_RADIUS + 2)
-                + ball.possessor.position
-            )
+        if possessor is not None:
+            ball_position = possessor.tilt * (possessor.size + 6) + possessor.position
 
         pygame.draw.circle(
-            self.screen, Color.OUTER_BALL, tuple(ball_position), BALL_RADIUS
+            self.screen, Color.OUTER_BALL, tuple(ball_position), ball.size
         )
         pygame.draw.circle(
-            self.screen, Color.INNER_BALL, tuple(ball_position), BALL_RADIUS - 2
+            self.screen, Color.INNER_BALL, tuple(ball_position), ball.size - 2
         )
 
     def update(self, dt: int):
@@ -125,7 +105,8 @@ class BluelockDrillVisualization:
         for player in self.drill.get_players():
             self.draw_player(player)
 
-        self.draw_ball(self.drill.ball)
+        if not self.drill.get_ball().is_possessed():
+            self.draw_ball(self.drill.get_ball())
         pygame.display.flip()
 
     def on_external_event(self, event: PlayerEvent):
@@ -135,6 +116,7 @@ class BluelockDrillVisualization:
             event.TURN_RIGHT: player.turn_right,
             event.RUN: player.run,
             event.TOGGLE: self.toggle,
+            event.SHOOT: player.shoot,
         }
         event_to_actions[event]()
 
@@ -154,6 +136,9 @@ while is_running:
                 keys_pressed.add(event.unicode)
             elif event.unicode == "t":
                 vis.on_external_event(PlayerEvent.TOGGLE)
+            elif event.unicode == "s":
+                vis.on_external_event(PlayerEvent.SHOOT)
+
         elif event.type == pygame.KEYUP:
             if event.unicode in movement_keys:
                 keys_pressed.remove(event.unicode)
