@@ -7,6 +7,9 @@ OFFENDER_SPEED = 0.1
 DEFENDER_SPEED = 0.08
 SHOOT_SPEED = 0.5
 
+PLAYER_SIZE = 16
+BALL_SIZE = 12
+
 
 class Team(int, Enum):
     OFFEND = 0
@@ -15,7 +18,12 @@ class Team(int, Enum):
 
 class Player:
     def __init__(
-        self, id: int, team: int, position: tuple[int], top_speed: float, size: int = 16
+        self,
+        id: int,
+        team: int,
+        position: tuple[int],
+        top_speed: float,
+        size: int = PLAYER_SIZE,
     ):
         self.id = id
         self.team = team
@@ -24,19 +32,17 @@ class Player:
         self.position = np.array(position, dtype=float)
         self.rotation = 0  # rad
         self.speed = 0
-        self.possessed_ball = None
+        self.ball = None
 
     def run(self):
         self.speed = self.top_speed
 
     def shoot(self):
-        if self.possessed_ball is not None:
-            self.possessed_ball.hit(SHOOT_SPEED, self.rotation, self.position)
-            self.possessed_ball = None
+        if self.ball is not None:
+            self.ball.hit(SHOOT_SPEED)
 
     def possess(self, ball: "Ball"):
-        ball.possess()
-        self.possessed_ball = ball
+        ball.possessed_by(self)
 
     def update(self, dt: int, context: "BluelockDrillContext"):
         velocity = self.speed * self.tilt
@@ -57,8 +63,8 @@ class Player:
     def set_rotation(self, angle: float):
         self.rotation = angle
 
-    def has_possession(self, ball: "Ball"):
-        return self.possessed_ball is not None and self.possessed_ball.id == ball.id
+    def has_possession(self):
+        return self.ball is not None
 
     @property
     def tilt(self):
@@ -80,33 +86,48 @@ BALL_FRICTION = 0.0005
 
 class Ball:
     def __init__(
-        self, id: int, position: tuple[int], size=12, friction: float = BALL_FRICTION
+        self,
+        id: int,
+        position: tuple[int],
+        size=BALL_SIZE,
+        friction: float = BALL_FRICTION,
     ):
         self.id = id
         self.position = np.array(position)
         self.speed = 0
         self.friction = friction
-        self.direction = 0  # rad
-        self.is_possessed = False
+        self.direction = 0
+        self.possessor: Player | None = None
         self.size = size
 
-    def possess(self):
-        self.is_possessed = True
+    def detach_from_possessor(self):
+        if self.possessor is not None:
+            self.possessor.ball = None
+            self.possessor = None
+
+    def possessed_by(self, player: Player):
+        self.detach_from_possessor()
+        self.possessor = player
+        self.possessor.ball = self
         self.speed = 0
         self.direction = 0
 
-    def hit(self, speed: float, direction: float, origin: np.ndarray):
-        self.is_possessed = False
+    def hit(self, speed: float):
+        origin = self.possessor.position
+        self.direction = self.possessor.rotation
+        self.detach_from_possessor()
         self.speed = speed
-        self.direction = direction
-        self.position = origin + (get_unit_vector(self.direction) * 26)
+        self.position = origin + (get_unit_vector(self.direction) * (PLAYER_SIZE * 2))
 
     def update(self, dt: int, context: "BluelockDrillContext"):
-        if not self.is_possessed:
+        if not self.is_possessed():
             dir_vector = get_unit_vector(self.direction)
             velocity = dir_vector * (self.speed)
             self.speed = max(0, self.speed - self.friction * dt)
             self.position += velocity * dt
+
+    def is_possessed(self):
+        return self.possessor is not None
 
 
 @dataclass
