@@ -57,6 +57,12 @@ class BluelockDrill:
             if should_run:
                 self.get_player(def_id).run()
 
+    def does_defense_have_possession(self):
+        for defender in self.__defensive_players:
+            if defender.has_possession():
+                return True
+        return False
+
     def update(self, dt: int):
         context = BluelockDrillContext(
             bounds=Rect(
@@ -65,13 +71,19 @@ class BluelockDrill:
         )
 
         self.apply_defense_policy()
+
+        does_defense_have_possession = self.does_defense_have_possession()
         self.__ball.update(dt, context)
         for defensive_player in self.__defensive_players:
             defensive_player.update(dt, context)
+            if not does_defense_have_possession and self.can_possess_ball(
+                self.__ball, defensive_player
+            ):
+                defensive_player.possess(self.__ball)
 
         for offensive_player in self.__offensive_players:
             offensive_player.update(dt, context)
-            if not self.__ball.is_possessed and self.can_possess_ball(
+            if not self.__ball.is_possessed() and self.can_possess_ball(
                 self.__ball, offensive_player
             ):
                 offensive_player.possess(self.__ball)
