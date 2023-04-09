@@ -1,7 +1,9 @@
 import pygame
 from enum import Enum
 from dataclasses import dataclass
-from drill import BluelockDrill, Team, Player, Ball
+from core import Team, Player, Ball
+from drill import BluelockDrill
+from defense_policy import naive_man_to_man
 
 
 class Color(tuple, Enum):
@@ -34,6 +36,7 @@ class PlayerEvent(int, Enum):
 
 
 FONT_SIZE = 16
+PLAYER_TILT_SPEED = 0.1
 
 
 class BluelockDrillVisualization:
@@ -105,15 +108,23 @@ class BluelockDrillVisualization:
         for player in self.drill.get_players():
             self.draw_player(player)
 
-        if not self.drill.get_ball().is_possessed():
+        if not self.drill.get_ball().is_possessed:
             self.draw_ball(self.drill.get_ball())
         pygame.display.flip()
 
     def on_external_event(self, event: PlayerEvent):
+
         player = self.drill.get_player(self.toggled_player_id)
+
+        def turn_left():
+            player.rotation -= PLAYER_TILT_SPEED
+
+        def turn_right():
+            player.rotation += PLAYER_TILT_SPEED
+
         event_to_actions = {
-            event.TURN_LEFT: player.turn_left,
-            event.TURN_RIGHT: player.turn_right,
+            event.TURN_LEFT: turn_left,
+            event.TURN_RIGHT: turn_right,
             event.RUN: player.run,
             event.TOGGLE: self.toggle,
             event.SHOOT: player.shoot,
@@ -121,7 +132,9 @@ class BluelockDrillVisualization:
         event_to_actions[event]()
 
 
-vis = BluelockDrillVisualization(BluelockDrill(640, 480, [9, 1], [21]))
+vis = BluelockDrillVisualization(
+    BluelockDrill(640, 480, [1, 2], [21, 22], naive_man_to_man)
+)
 movement_keys = set(["a", "d", "w"])
 keys_pressed = set([])
 is_running = True

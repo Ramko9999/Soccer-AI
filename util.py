@@ -32,6 +32,10 @@ def get_unit_vector(angle: float):
     return np.array([math.cos(angle), math.sin(angle)])
 
 
+def get_angle(vector: np.ndarray):
+    return math.atan2(vector[1], vector[0])
+
+
 def get_euclidean_dist(point1: np.ndarray, point2: np.ndarray):
     return math.sqrt(np.sum((point1 - point2) ** 2))
 
