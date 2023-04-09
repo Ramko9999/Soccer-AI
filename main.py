@@ -1,8 +1,9 @@
 import pygame
 from enum import Enum
 from dataclasses import dataclass
-from core import Team, Player, Ball
+from core import Team, Player, Ball, Offender
 from drill import BluelockDrill
+from util import get_euclidean_dist
 from defense_policy import naive_man_to_man
 
 
@@ -31,8 +32,7 @@ class PlayerEvent(int, Enum):
     TURN_LEFT = 0
     TURN_RIGHT = 1
     RUN = 2
-    TOGGLE = 3
-    SHOOT = 4
+    SHOOT = 3
 
 
 FONT_SIZE = 16
@@ -46,11 +46,6 @@ class BluelockDrillVisualization:
         self.toggled_player_id = self.drill.get_players()[0].id
         self.font = pygame.font.SysFont(None, FONT_SIZE)
         self.screen = pygame.display.set_mode((640, 480))
-
-    def toggle(self):
-        player_ids = list(map(lambda player: player.id, self.drill.get_players()))
-        next_id_index = (player_ids.index(self.toggled_player_id) + 1) % len(player_ids)
-        self.toggled_player_id = player_ids[next_id_index]
 
     def draw_pitch(self):
         self.screen.fill(Color.PITCH)
@@ -85,7 +80,7 @@ class BluelockDrillVisualization:
 
         # todo(Ramko9999): center the kit number within the player
         self.screen.blit(kit_number, (pos_x - player.size / 2, pos_y - player.size / 2))
-        if player.has_possession(self.drill.get_ball()):
+        if player.has_possession():
             self.draw_ball(self.drill.get_ball(), possessor=player)
         else:
             self.draw_player_tilt_indicator(player)
@@ -105,10 +100,24 @@ class BluelockDrillVisualization:
     def update(self, dt: int):
         self.draw_pitch()
         self.drill.update(dt)
+        closest_dist_to_ball, closest_offender = float("inf"), None
+        for player in self.drill.get_players():
+            if type(player) is Offender:
+                dist_to_ball = get_euclidean_dist(
+                    player.position, self.drill.get_ball().position
+                )
+                if player.has_possession():
+                    dist_to_ball = 0
+                if dist_to_ball < closest_dist_to_ball:
+                    closest_dist_to_ball, closest_offender = dist_to_ball, player
+
+        if closest_offender is not None:
+            self.toggled_player_id = closest_offender.id
+
         for player in self.drill.get_players():
             self.draw_player(player)
 
-        if not self.drill.get_ball().is_possessed:
+        if not self.drill.get_ball().is_possessed():
             self.draw_ball(self.drill.get_ball())
         pygame.display.flip()
 
@@ -126,14 +135,13 @@ class BluelockDrillVisualization:
             event.TURN_LEFT: turn_left,
             event.TURN_RIGHT: turn_right,
             event.RUN: player.run,
-            event.TOGGLE: self.toggle,
             event.SHOOT: player.shoot,
         }
         event_to_actions[event]()
 
 
 vis = BluelockDrillVisualization(
-    BluelockDrill(640, 480, [1, 2], [21, 22], naive_man_to_man)
+    BluelockDrill(640, 480, [1, 2, 3, 4, 5], [11], naive_man_to_man)
 )
 movement_keys = set(["a", "d", "w"])
 keys_pressed = set([])
@@ -147,8 +155,6 @@ while is_running:
         elif event.type == pygame.KEYDOWN:
             if event.unicode in movement_keys:
                 keys_pressed.add(event.unicode)
-            elif event.unicode == "t":
-                vis.on_external_event(PlayerEvent.TOGGLE)
             elif event.unicode == "s":
                 vis.on_external_event(PlayerEvent.SHOOT)
 
