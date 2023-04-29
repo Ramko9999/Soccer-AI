@@ -1,177 +1,61 @@
-import pygame
+import argparse
+from environment.drill import BluelockDrill
+from visualization import InteractiveBluelockDrillVisualization
+from environment.defense_policy import naive_man_to_man
 from enum import Enum
-from dataclasses import dataclass
-from core import Team, Player, Ball, Offender
-from drill import BluelockDrill
-from util import get_euclidean_dist
-from defense_policy import naive_man_to_man
+from evolution.sequential import evolve_sequentially
 
 
-class Color(tuple, Enum):
-    PITCH = (21, 121, 32)
-    WHITE = (255, 255, 255)
-    BLACK = (0, 0, 0)
-    TOGGLE = (173, 216, 230)
-    OUTER_BALL = (75, 54, 95)
-    INNER_BALL = (105, 60, 94)
+class TrainingStyle(str, Enum):
+    SEQUENTIAL = "sequential"
 
 
-@dataclass
-class Kit:
-    primary: Color
-    number: Color
+def visualize(namespace: argparse.Namespace):
+    offenders = [i for i in range(namespace.offense)]
+    defenders = [i + namespace.offense for i in range(namespace.defense)]
+
+    drill = BluelockDrill(
+        640,
+        480,
+        offensive_players=offenders,
+        defense_players=defenders,
+        defense_policy=naive_man_to_man,
+    )
+    vis = InteractiveBluelockDrillVisualization(drill)
+    vis.start()
 
 
-team_to_kit = {
-    Team.OFFEND: Kit(Color.WHITE, Color.BLACK),
-    Team.DEFEND: Kit(Color.BLACK, Color.WHITE),
-}
+def train(namespace: argparse.Namespace):
+    style: TrainingStyle = namespace.style
+    if style == TrainingStyle.SEQUENTIAL:
+        evolve_sequentially()
 
 
-class PlayerEvent(int, Enum):
-    TURN_LEFT = 0
-    TURN_RIGHT = 1
-    RUN = 2
-    SHOOT = 3
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="A playmaking AI for soccer")
+    subparsers = parser.add_subparsers()
 
+    visualize_parser = subparsers.add_parser(
+        name="visualize", description="Visualize the playmaking AI"
+    )
+    visualize_parser.set_defaults(func=visualize)
+    visualize_parser.add_argument(
+        "--offense", type=int, help="The number of offenders to play", default=2
+    )
+    visualize_parser.add_argument(
+        "--defense", type=int, help="The number of defenders to play", default=2
+    )
 
-FONT_SIZE = 16
-PLAYER_TILT_SPEED = 0.1
+    train_parser = subparsers.add_parser(
+        name="train", description="Train the playmaking AI"
+    )
+    train_parser.set_defaults(func=train)
+    train_parser.add_argument(
+        "--style",
+        type=TrainingStyle,
+        default=TrainingStyle.SEQUENTIAL,
+        help="The methodology of training the playmaking AI. In 'sequential' training, the AI will learn each disjoing task of soccer and aggregate its learnings",
+    )
 
-
-class BluelockDrillVisualization:
-    def __init__(self, drill: BluelockDrill):
-        pygame.init()
-        self.drill = drill
-        self.toggled_player_id = self.drill.get_players()[0].id
-        self.font = pygame.font.SysFont(None, FONT_SIZE)
-        self.screen = pygame.display.set_mode((640, 480))
-
-    def draw_pitch(self):
-        self.screen.fill(Color.PITCH)
-
-    def draw_player_tilt_indicator(self, player: Player):
-        kit = team_to_kit[player.team]
-        indicator_start_pos = player.tilt * (player.size + 4) + player.position
-        indicator_end_pos = player.tilt * (player.size + 8) + player.position
-        pygame.draw.line(
-            self.screen,
-            kit.primary,
-            tuple(indicator_start_pos),
-            tuple(indicator_end_pos),
-            width=3,
-        )
-
-    def draw_toggle_indicator(self, player: Player):
-        pygame.draw.circle(
-            self.screen, Color.TOGGLE, tuple(player.position), player.size + 2
-        )
-
-    def draw_player(self, player: Player):
-        kit = team_to_kit[player.team]
-        if player.id == self.toggled_player_id:
-            self.draw_toggle_indicator(player)
-
-        pygame.draw.circle(
-            self.screen, kit.primary, tuple(player.position), player.size
-        )
-        kit_number = self.font.render(str(player.id), True, kit.number)
-        pos_x, pos_y = tuple(player.position)
-
-        # todo(Ramko9999): center the kit number within the player
-        self.screen.blit(kit_number, (pos_x - player.size / 2, pos_y - player.size / 2))
-        if player.has_possession():
-            self.draw_ball(self.drill.get_ball(), possessor=player)
-        else:
-            self.draw_player_tilt_indicator(player)
-
-    def draw_ball(self, ball: Ball, possessor: Player | None = None):
-        ball_position = ball.position
-        if possessor is not None:
-            ball_position = possessor.tilt * (possessor.size + 6) + possessor.position
-
-        pygame.draw.circle(
-            self.screen, Color.OUTER_BALL, tuple(ball_position), ball.size
-        )
-        pygame.draw.circle(
-            self.screen, Color.INNER_BALL, tuple(ball_position), ball.size - 2
-        )
-
-    def update(self, dt: int):
-        self.draw_pitch()
-        self.drill.update(dt)
-        closest_dist_to_ball, closest_offender = float("inf"), None
-        for player in self.drill.get_players():
-            if type(player) is Offender:
-                dist_to_ball = get_euclidean_dist(
-                    player.position, self.drill.get_ball().position
-                )
-                if player.has_possession():
-                    dist_to_ball = 0
-                if dist_to_ball < closest_dist_to_ball:
-                    closest_dist_to_ball, closest_offender = dist_to_ball, player
-
-        if closest_offender is not None:
-            self.toggled_player_id = closest_offender.id
-
-        for player in self.drill.get_players():
-            self.draw_player(player)
-
-        if not self.drill.get_ball().is_possessed():
-            self.draw_ball(self.drill.get_ball())
-        pygame.display.flip()
-
-    def on_external_event(self, event: PlayerEvent):
-
-        player = self.drill.get_player(self.toggled_player_id)
-
-        def turn_left():
-            player.rotation -= PLAYER_TILT_SPEED
-
-        def turn_right():
-            player.rotation += PLAYER_TILT_SPEED
-
-        event_to_actions = {
-            event.TURN_LEFT: turn_left,
-            event.TURN_RIGHT: turn_right,
-            event.RUN: player.run,
-            event.SHOOT: player.shoot,
-        }
-        event_to_actions[event]()
-
-
-vis = BluelockDrillVisualization(
-    BluelockDrill(640, 480, [1, 2, 3, 4, 5], [11], naive_man_to_man)
-)
-movement_keys = set(["a", "d", "w"])
-keys_pressed = set([])
-is_running = True
-clock = pygame.time.Clock()
-while is_running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            is_running = False
-            continue
-        elif event.type == pygame.KEYDOWN:
-            if event.unicode in movement_keys:
-                keys_pressed.add(event.unicode)
-            elif event.unicode == "s":
-                vis.on_external_event(PlayerEvent.SHOOT)
-
-        elif event.type == pygame.KEYUP:
-            if event.unicode in movement_keys:
-                keys_pressed.remove(event.unicode)
-
-    for key in keys_pressed:
-        if key == "a":
-            vis.on_external_event(PlayerEvent.TURN_LEFT)
-        elif key == "d":
-            vis.on_external_event(PlayerEvent.TURN_RIGHT)
-        elif key == "w":
-            vis.on_external_event(PlayerEvent.RUN)
-
-    dt = clock.tick(60)
-    vis.update(dt)
-
-
-pygame.quit()
+    namespace = parser.parse_args()
+    namespace.func(namespace)
