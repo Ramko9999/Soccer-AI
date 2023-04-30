@@ -1,22 +1,19 @@
 import numpy as np
+from environment.config import (
+    BALL_FRICTION,
+    BALL_SIZE,
+    PLAYER_SIZE,
+    PLAYER_SHOT_SPEED,
+    PLAYER_DEFENDER_SPEED,
+    PLAYER_OFFENDER_SPEED,
+)
 from enum import Enum
-from util import get_unit_vector, Rect
-from dataclasses import dataclass
-
-OFFENDER_SPEED = 0.1
-DEFENDER_SPEED = 0.08
-SHOOT_SPEED = 0.5
-
-PLAYER_SIZE = 16
-BALL_SIZE = 12
+from util import get_unit_vector, can_circles_intersect, Circle
 
 
 class Team(int, Enum):
     OFFEND = 0
     DEFEND = 1
-
-
-# todo: remove BluelockDrillContext
 
 
 class Player:
@@ -42,26 +39,15 @@ class Player:
 
     def shoot(self):
         if self.ball is not None:
-            self.ball.hit(SHOOT_SPEED)
+            self.ball.hit(PLAYER_SHOT_SPEED)
 
     def possess(self, ball: "Ball"):
         ball.possessed_by(self)
 
-    def update(self, dt: int, context: "BluelockDrillContext"):
+    def update(self, dt: int):
         velocity = self.speed * self.tilt
         self.position = self.position + velocity * dt
         self.speed = self.angular_speed = 0
-
-        # todo(ramko9999): more tightly restrict the player from leaving the bounds
-        pos_x = max(
-            min(self.position[0], context.bounds.bottom_right[0] - self.size),
-            context.bounds.top_left[0] + self.size,
-        )
-        pos_y = max(
-            min(self.position[1], context.bounds.bottom_right[1] - self.size),
-            context.bounds.top_left[1] + self.size,
-        )
-        self.position = np.array([pos_x, pos_y])
 
     def set_rotation(self, angle: float):
         self.rotation = angle
@@ -76,26 +62,21 @@ class Player:
 
 class Offender(Player):
     def __init__(self, id: int, position: tuple[int]):
-        super().__init__(id, Team.OFFEND, position, top_speed=OFFENDER_SPEED)
+        super().__init__(id, Team.OFFEND, position, top_speed=PLAYER_OFFENDER_SPEED)
 
 
 class Defender(Player):
     def __init__(self, id: int, position: tuple[int]):
-        super().__init__(id, Team.DEFEND, position, top_speed=DEFENDER_SPEED)
-
-
-BALL_FRICTION = 0.0005
+        super().__init__(id, Team.DEFEND, position, top_speed=PLAYER_DEFENDER_SPEED)
 
 
 class Ball:
     def __init__(
         self,
-        id: int,
         position: tuple[int],
         size=BALL_SIZE,
         friction: float = BALL_FRICTION,
     ):
-        self.id = id
         self.position = np.array(position)
         self.speed = 0
         self.friction = friction
@@ -122,7 +103,7 @@ class Ball:
         self.speed = speed
         self.position = origin + (get_unit_vector(self.direction) * (PLAYER_SIZE * 2))
 
-    def update(self, dt: int, context: "BluelockDrillContext"):
+    def update(self, dt: int):
         if not self.is_possessed():
             dir_vector = get_unit_vector(self.direction)
             velocity = dir_vector * (self.speed)
@@ -133,6 +114,66 @@ class Ball:
         return self.possessor is not None
 
 
-@dataclass
-class BluelockDrillContext:
-    bounds: Rect
+class BluelockEnvironment:
+    def __init__(
+        self,
+        dims: tuple[int, int],
+        offense: list[Offender],
+        defense: list[Defender],
+        ball: Ball,
+    ):
+        self.width, self.height = dims
+        self.offense = offense
+        self.defense = defense
+        self.ball = ball
+
+    def get_player(self, id: int):
+        for offensive_player in self.offense:
+            if offensive_player.id == id:
+                return offensive_player
+        for defensive_player in self.defense:
+            if defensive_player.id == id:
+                return defensive_player
+        return None
+
+    def get_players(self):
+        return self.offense + self.defense
+
+    def can_possess_ball(self, ball: Ball, player: Player):
+        return can_circles_intersect(
+            Circle(ball.position, ball.size), Circle(player.position, player.size)
+        )
+
+    def does_defense_have_possession(self):
+        for defender in self.defense:
+            if defender.has_possession():
+                return True
+        return False
+
+    def clamp_players(self):
+        for player in self.get_players():
+            player.position[0] = max(
+                min(player.position[0], self.width - player.size),
+                player.size,
+            )
+            player.position[1] = max(
+                min(player.position[1], self.height - player.size), player.size
+            )
+
+    def update(self, dt: int):
+        does_defense_have_possession = self.does_defense_have_possession()
+        self.ball.update(dt)
+        for defensive_player in self.defense:
+            defensive_player.update(dt)
+            if not does_defense_have_possession and self.can_possess_ball(
+                self.ball, defensive_player
+            ):
+                defensive_player.possess(self.ball)
+
+        for offensive_player in self.offense:
+            offensive_player.update(dt)
+            if not self.ball.is_possessed() and self.can_possess_ball(
+                self.ball, offensive_player
+            ):
+                offensive_player.possess(self.ball)
+        self.clamp_players()

@@ -1,18 +1,12 @@
 import pygame
 from enum import Enum
 from dataclasses import dataclass
-from environment.core import Team, Player, Ball, Offender
-from environment.drill import BluelockDrill
-from util import get_euclidean_dist
-
-
-class Color(tuple, Enum):
-    PITCH = (21, 121, 32)
-    WHITE = (255, 255, 255)
-    BLACK = (0, 0, 0)
-    TOGGLE = (173, 216, 230)
-    OUTER_BALL = (75, 54, 95)
-    INNER_BALL = (105, 60, 94)
+from environment.core import Team, Player, Ball, BluelockEnvironment
+from visualization.config import (
+    Color,
+    KIT_NUMBER_FONT_SIZE,
+    VISUALIZATION_PLAYER_TILT_SPEED,
+)
 
 
 @dataclass
@@ -32,19 +26,16 @@ class PlayerEvent(int, Enum):
     TURN_RIGHT = 1
     RUN = 2
     SHOOT = 3
+    TOGGLE = 4
 
 
-FONT_SIZE = 16
-PLAYER_TILT_SPEED = 0.1
-
-
-class InteractiveBluelockDrillVisualization:
-    def __init__(self, drill: BluelockDrill):
+class BluelockEnvironmentVisualizer:
+    def __init__(self, env: BluelockEnvironment):
         pygame.init()
-        self.drill = drill
-        self.toggled_player_id = self.drill.get_players()[0].id
-        self.font = pygame.font.SysFont(None, FONT_SIZE)
-        self.screen = pygame.display.set_mode((640, 480))
+        self.env = env
+        self.toggled_player_id = self.env.offense[0].id
+        self.font = pygame.font.SysFont(None, KIT_NUMBER_FONT_SIZE)
+        self.screen = pygame.display.set_mode((env.width, env.height))
 
     def draw_pitch(self):
         self.screen.fill(Color.PITCH)
@@ -79,15 +70,15 @@ class InteractiveBluelockDrillVisualization:
 
         # todo(Ramko9999): center the kit number within the player
         self.screen.blit(kit_number, (pos_x - player.size / 2, pos_y - player.size / 2))
-        if player.has_possession():
-            self.draw_ball(self.drill.get_ball(), possessor=player)
-        else:
-            self.draw_player_tilt_indicator(player)
+        self.draw_player_tilt_indicator(player)
 
-    def draw_ball(self, ball: Ball, possessor: Player | None = None):
+    def draw_ball(self, ball: Ball):
         ball_position = ball.position
-        if possessor is not None:
-            ball_position = possessor.tilt * (possessor.size + 6) + possessor.position
+        if ball.possessor is not None:
+            ball_position = (
+                ball.possessor.tilt * (ball.possessor.size + 6)
+                + ball.possessor.position
+            )
 
         pygame.draw.circle(
             self.screen, Color.OUTER_BALL, tuple(ball_position), ball.size
@@ -98,42 +89,33 @@ class InteractiveBluelockDrillVisualization:
 
     def update(self, dt: int):
         self.draw_pitch()
-        self.drill.update(dt)
-        closest_dist_to_ball, closest_offender = float("inf"), None
-        for player in self.drill.get_players():
-            if type(player) is Offender:
-                dist_to_ball = get_euclidean_dist(
-                    player.position, self.drill.get_ball().position
-                )
-                if player.has_possession():
-                    dist_to_ball = 0
-                if dist_to_ball < closest_dist_to_ball:
-                    closest_dist_to_ball, closest_offender = dist_to_ball, player
-
-        if closest_offender is not None:
-            self.toggled_player_id = closest_offender.id
-
-        for player in self.drill.get_players():
+        self.env.update(dt)
+        for player in self.env.get_players():
             self.draw_player(player)
 
-        if not self.drill.get_ball().is_possessed():
-            self.draw_ball(self.drill.get_ball())
+        self.draw_ball(self.env.ball)
         pygame.display.flip()
 
-    def on_external_event(self, event: PlayerEvent):
-        player = self.drill.get_player(self.toggled_player_id)
+    def on_event(self, event: PlayerEvent):
+        player = self.env.get_player(self.toggled_player_id)
 
         def turn_left():
-            player.rotation -= PLAYER_TILT_SPEED
+            player.rotation -= VISUALIZATION_PLAYER_TILT_SPEED
 
         def turn_right():
-            player.rotation += PLAYER_TILT_SPEED
+            player.rotation += VISUALIZATION_PLAYER_TILT_SPEED
+
+        def toggle():
+            offense_ids = sorted([offender.id for offender in self.env.offense])
+            toggle_index = offense_ids.index(self.toggled_player_id)
+            self.toggled_player_id = offense_ids[(toggle_index + 1) % len(offense_ids)]
 
         event_to_actions = {
             event.TURN_LEFT: turn_left,
             event.TURN_RIGHT: turn_right,
             event.RUN: player.run,
             event.SHOOT: player.shoot,
+            event.TOGGLE: toggle,
         }
         event_to_actions[event]()
 
@@ -155,12 +137,14 @@ class InteractiveBluelockDrillVisualization:
                     if event.unicode in key_to_movement:
                         keys_pressed.add(event.unicode)
                     elif event.unicode == "s":
-                        self.on_external_event(PlayerEvent.SHOOT)
+                        self.on_event(PlayerEvent.SHOOT)
+                    elif event.unicode == "t":
+                        self.on_event(PlayerEvent.TOGGLE)
                 elif event.type == pygame.KEYUP:
                     if event.unicode in key_to_movement:
                         keys_pressed.remove(event.unicode)
             for key in keys_pressed:
-                self.on_external_event(key_to_movement[key])
+                self.on_event(key_to_movement[key])
 
             dt = clock.tick(60)
             self.update(dt)

@@ -1,5 +1,6 @@
 import numpy as np
 import math
+import random
 from dataclasses import dataclass
 
 
@@ -45,6 +46,13 @@ def can_circles_intersect(a: Circle, b: Circle):
     return dist <= (a.radius + b.radius)
 
 
+def get_random_point(x_max: int, y_max: int, x_min: int = 0, y_min: int = 0):
+    x_range = x_max - x_min
+    y_range = y_max - y_min
+    return random.random() * x_range + x_min, random.random() * y_range + y_min
+
+
+# todo: remove this if this is not useful
 def can_circle_rect_intersect(a: Circle, b: Rect):
     is_center_x_in_bounds = (
         a.center[0] >= b.top_left[0] and a.center[0] <= b.bottom_right[0]

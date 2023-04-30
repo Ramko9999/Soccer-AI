@@ -1,9 +1,13 @@
 import argparse
-from environment.drill import BluelockDrill
-from visualization import InteractiveBluelockDrillVisualization
-from environment.defense_policy import naive_man_to_man
-from enum import Enum
+from environment.core import Offender, Defender, Ball
+from environment.config import ENVIRONMENT_HEIGHT, ENVIRONMENT_WIDTH
+from environment.core import BluelockEnvironment
+from environment.defense.policy import naive_man_to_man
+from environment.defense.agent import decorate_with_policy_defense
+from visualization.visualizer import BluelockEnvironmentVisualizer
 from evolution.sequential import evolve_sequentially
+from util import get_random_point
+from enum import Enum
 
 
 class TrainingStyle(str, Enum):
@@ -11,17 +15,31 @@ class TrainingStyle(str, Enum):
 
 
 def visualize(namespace: argparse.Namespace):
-    offenders = [i for i in range(namespace.offense)]
-    defenders = [i + namespace.offense for i in range(namespace.defense)]
+    offenders, defenders = [], []
+    for i in range(namespace.offense):
+        offenders.append(
+            Offender(i, get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT))
+        )
+    for i in range(namespace.defense):
+        defenders.append(
+            Defender(
+                i + namespace.offense,
+                get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT),
+            )
+        )
 
-    drill = BluelockDrill(
-        640,
-        480,
-        offensive_players=offenders,
-        defense_players=defenders,
-        defense_policy=naive_man_to_man,
+    ball = Ball(position=get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT))
+
+    env = decorate_with_policy_defense(
+        BluelockEnvironment(
+            dims=(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT),
+            offense=offenders,
+            defense=defenders,
+            ball=ball,
+        ),
+        policy=naive_man_to_man,
     )
-    vis = InteractiveBluelockDrillVisualization(drill)
+    vis = BluelockEnvironmentVisualizer(env)
     vis.start()
 
 
@@ -54,7 +72,7 @@ if __name__ == "__main__":
         "--style",
         type=TrainingStyle,
         default=TrainingStyle.SEQUENTIAL,
-        help="The methodology of training the playmaking AI. In 'sequential' training, the AI will learn each disjoing task of soccer and aggregate its learnings",
+        help="The methodology of training the playmaking AI. In 'sequential' training, the AI will learn each disjoint task of soccer and aggregate its learnings",
     )
 
     namespace = parser.parse_args()
