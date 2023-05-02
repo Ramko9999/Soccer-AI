@@ -16,6 +16,23 @@ from util import (
 )
 
 
+def get_seek_ball_inputs(env: BluelockEnvironment, seeker_id: int):
+    offender = env.get_player(seeker_id)
+    dx, dy = env.ball.position - offender.position
+    vbx, vby = get_unit_vector(env.ball.direction) * env.ball.speed
+    return [dx, dy, vbx, vby]
+
+
+def apply_seek(
+    env: BluelockEnvironment, seeker_id: int, seeker_model: neat.nn.FeedForwardNetwork
+):
+    inputs = get_seek_ball_inputs(env, seeker_id)
+    outputs = seeker_model.activate(inputs)
+    orientation = get_beeline_orientation(np.array(outputs))
+    env.get_player(seeker_id).set_rotation(orientation)
+    env.get_player(seeker_id).run()
+
+
 class SeekBall(SequentialEvolutionTask):
     def __init__(self):
         config = neat.Config(
@@ -32,10 +49,7 @@ class SeekBall(SequentialEvolutionTask):
         self, env: BluelockEnvironment, player_id: int, net: neat.nn.FeedForwardNetwork
     ):
         def action(env: BluelockEnvironment, offender: Offender):
-            vx, vy = net.activate(self.get_inputs(env, player_id))
-            orientation = get_beeline_orientation(np.array([vx, vy]))
-            offender.set_rotation(orientation)
-            offender.run()
+            apply_seek(env, offender.id, net)
 
         controls = {}
         controls[player_id] = action
@@ -61,12 +75,6 @@ class SeekBall(SequentialEvolutionTask):
             )
 
         return factory
-
-    def get_inputs(self, env: BluelockEnvironment, offender_id: int):
-        offender = env.get_player(offender_id)
-        dx, dy = env.ball.position - offender.position
-        vbx, vby = get_unit_vector(env.ball.direction) * env.ball.speed
-        return [dx, dy, vbx, vby]
 
     def compute_fitness(self, genomes, config):
         episodes = 10
