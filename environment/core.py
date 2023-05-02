@@ -161,12 +161,13 @@ class BluelockEnvironment:
             )
 
     def clamp_ball(self):
-        self.ball.position[0] = max(
-            min(self.ball.position[0], self.width - self.ball.size), self.ball.size
-        )
-        self.ball.position[1] = max(
-            min(self.ball.position[1], self.height - self.ball.size), self.ball.size
-        )
+        if not self.ball.is_possessed():
+            self.ball.position[0] = max(
+                min(self.ball.position[0], self.width - self.ball.size), self.ball.size
+            )
+            self.ball.position[1] = max(
+                min(self.ball.position[1], self.height - self.ball.size), self.ball.size
+            )
 
     def update(self, dt: int):
         does_defense_have_possession = self.does_defense_have_possession()
