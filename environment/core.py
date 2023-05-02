@@ -140,8 +140,12 @@ class BluelockEnvironment:
         return self.offense + self.defense
 
     def can_possess_ball(self, ball: Ball, player: Player):
+        # todo: remove the need to have to check if the ball is possesed to calculate its position
+        ball_position = ball.position
+        if ball.is_possessed():
+            ball_position = ball.possessor.position
         return can_circles_intersect(
-            Circle(ball.position, ball.size), Circle(player.position, player.size)
+            Circle(ball_position, ball.size), Circle(player.position, player.size)
         )
 
     def does_defense_have_possession(self):

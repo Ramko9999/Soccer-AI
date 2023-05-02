@@ -3,9 +3,9 @@ from environment.core import Offender, Defender, Ball
 from environment.config import ENVIRONMENT_HEIGHT, ENVIRONMENT_WIDTH
 from environment.core import BluelockEnvironment
 from environment.defense.policy import naive_man_to_man
-from environment.defense.agent import decorate_with_policy_defense
+from environment.defense.agent import with_policy_defense
+from evolution.sequential.workflow import evolve_sequential, watch_sequential
 from visualization.visualizer import BluelockEnvironmentVisualizer
-from evolution.sequential import evolve_sequentially
 from util import get_random_point
 from enum import Enum
 
@@ -30,7 +30,7 @@ def visualize(namespace: argparse.Namespace):
 
     ball = Ball(position=get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT))
 
-    env = decorate_with_policy_defense(
+    env = with_policy_defense(
         BluelockEnvironment(
             dims=(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT),
             offense=offenders,
@@ -39,6 +39,7 @@ def visualize(namespace: argparse.Namespace):
         ),
         policy=naive_man_to_man,
     )
+
     vis = BluelockEnvironmentVisualizer(env)
     vis.start()
 
@@ -46,7 +47,13 @@ def visualize(namespace: argparse.Namespace):
 def train(namespace: argparse.Namespace):
     style: TrainingStyle = namespace.style
     if style == TrainingStyle.SEQUENTIAL:
-        evolve_sequentially()
+        evolve_sequential()
+
+
+def watch(namespace: argparse.Namespace):
+    style: TrainingStyle = namespace.style
+    if style == TrainingStyle.SEQUENTIAL:
+        watch_sequential()
 
 
 if __name__ == "__main__":
@@ -73,6 +80,17 @@ if __name__ == "__main__":
         type=TrainingStyle,
         default=TrainingStyle.SEQUENTIAL,
         help="The methodology of training the playmaking AI. In 'sequential' training, the AI will learn each disjoint task of soccer and aggregate its learnings",
+    )
+
+    watch_parser = subparsers.add_parser(
+        name="watch", description="Watch the result of training for the playmaking AI"
+    )
+    watch_parser.set_defaults(func=watch)
+    watch_parser.add_argument(
+        "--style",
+        type=TrainingStyle,
+        default=TrainingStyle.SEQUENTIAL,
+        help="The type of training to watch the result of",
     )
 
     namespace = parser.parse_args()
