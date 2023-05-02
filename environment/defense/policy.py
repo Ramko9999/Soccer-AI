@@ -1,6 +1,6 @@
 from environment.core import Defender, Offender, Ball
 from typing import Callable
-from util import get_euclidean_dist, get_angle
+from util import get_euclidean_dist, get_beeline_orientation
 from dataclasses import dataclass
 import heapq
 
@@ -36,7 +36,9 @@ def naive_man_to_man(
         assignments.append(
             Assignment(
                 defender_id=closest_defender.id,
-                orientation=get_angle(ball.position - closest_defender.position),
+                orientation=get_beeline_orientation(
+                    ball.position - closest_defender.position
+                ),
                 should_run=True,
             )
         )
@@ -52,7 +54,7 @@ def naive_man_to_man(
                     (
                         offender_priority,
                         get_euclidean_dist(defender.position, offender.position),
-                        get_angle(offender.position - defender.position),
+                        get_beeline_orientation(offender.position - defender.position),
                         defender.id,
                         offender.id,
                     )

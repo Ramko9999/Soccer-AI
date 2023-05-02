@@ -87,14 +87,17 @@ class BluelockEnvironmentVisualizer:
             self.screen, Color.INNER_BALL, tuple(ball_position), ball.size - 2
         )
 
-    def update(self, dt: int):
+    def draw(self):
         self.draw_pitch()
-        self.env.update(dt)
         for player in self.env.get_players():
             self.draw_player(player)
 
         self.draw_ball(self.env.ball)
         pygame.display.flip()
+
+    def update(self, dt: int):
+        self.env.update(dt)
+        self.draw()
 
     def on_event(self, event: PlayerEvent):
         player = self.env.get_player(self.toggled_player_id)

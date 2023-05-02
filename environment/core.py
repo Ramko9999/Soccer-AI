@@ -160,6 +160,14 @@ class BluelockEnvironment:
                 min(player.position[1], self.height - player.size), player.size
             )
 
+    def clamp_ball(self):
+        self.ball.position[0] = max(
+            min(self.ball.position[0], self.width - self.ball.size), self.ball.size
+        )
+        self.ball.position[1] = max(
+            min(self.ball.position[1], self.height - self.ball.size), self.ball.size
+        )
+
     def update(self, dt: int):
         does_defense_have_possession = self.does_defense_have_possession()
         self.ball.update(dt)
@@ -177,3 +185,4 @@ class BluelockEnvironment:
             ):
                 offensive_player.possess(self.ball)
         self.clamp_players()
+        self.clamp_ball()

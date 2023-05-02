@@ -33,7 +33,7 @@ def get_unit_vector(angle: float):
     return np.array([math.cos(angle), math.sin(angle)])
 
 
-def get_angle(vector: np.ndarray):
+def get_beeline_orientation(vector: np.ndarray):
     return math.atan2(vector[1], vector[0])
 
 
@@ -46,10 +46,13 @@ def can_circles_intersect(a: Circle, b: Circle):
     return dist <= (a.radius + b.radius)
 
 
-def get_random_point(x_max: int, y_max: int, x_min: int = 0, y_min: int = 0):
-    x_range = x_max - x_min
-    y_range = y_max - y_min
-    return random.random() * x_range + x_min, random.random() * y_range + y_min
+def get_random_within_range(max: float, min: float):
+    range = max - min
+    return random.random() * range + min
+
+
+def get_random_point(x_max: float, y_max: float, x_min: float = 0, y_min: float = 0):
+    return get_random_within_range(x_max, x_min), get_random_within_range(y_max, y_min)
 
 
 # todo: remove this if this is not useful

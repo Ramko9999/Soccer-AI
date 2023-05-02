@@ -2,7 +2,7 @@ from environment.core import BluelockEnvironment
 from environment.defense.policy import DefensePolicy
 
 # decorates over BluelockEnvironment by controlling the defense's movements according to some policy
-def decorate_with_policy_defense(
+def with_policy_defense(
     env: BluelockEnvironment, policy: DefensePolicy
 ) -> BluelockEnvironment:
     old_update = env.update
