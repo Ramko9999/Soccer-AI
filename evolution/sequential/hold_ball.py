@@ -13,6 +13,29 @@ from visualization.visualizer import BluelockEnvironmentVisualizer
 from util import get_unit_vector, get_random_within_range, get_beeline_orientation, Rect
 
 
+def get_hold_ball_inputs(env: BluelockEnvironment, holder_id: int, defender_id: int):
+    offender, defender = env.get_player(holder_id), env.get_player(defender_id)
+    dx, dy = offender.position - defender.position
+    vx, vy = defender.speed * defender.tilt
+    rect = Rect([0.0, 0.0], height=env.height, width=env.width)
+    inputs = [dx, dy, vx, vy]
+    for point in rect.get_vertices():
+        pdx, pdy = np.array(point) - offender.position
+        inputs.append(pdx)
+        inputs.append(pdy)
+    return inputs
+
+
+def apply_hold_ball(
+    env: BluelockEnvironment,
+    holder_id: int,
+    defender_id: int,
+    holder_net: neat.nn.FeedForwardNetwork,
+):
+    outputs = holder_net.activate(get_hold_ball_inputs(env, holder_id, defender_id))
+    return get_beeline_orientation(np.array(outputs))
+
+
 class HoldBall(SequentialEvolutionTask):
     def __init__(self):
         config = neat.Config(
@@ -23,7 +46,6 @@ class HoldBall(SequentialEvolutionTask):
             os.path.join(CONFIGS_PATH, "hold_ball.ini"),
         )
         super().__init__(CHECKPOINTS_PATH, MODELS_PATH, PLOTS_PATH, config, "hold_ball")
-        self.compute_fitness_call_count = 0
 
     def with_controls(
         self,
@@ -33,9 +55,7 @@ class HoldBall(SequentialEvolutionTask):
         net: neat.nn.FeedForwardNetwork,
     ):
         def action(env: BluelockEnvironment, offender: Offender):
-            vx, vy = net.activate(self.get_inputs(env, offender_id, defender_id))
-            orientation = get_beeline_orientation(np.array([vx, vy]))
-            offender.set_rotation(orientation)
+            offender.set_rotation(apply_hold_ball(env, offender.id, defender_id, net))
             offender.run()
 
         controls = {}
@@ -63,18 +83,6 @@ class HoldBall(SequentialEvolutionTask):
 
         return factory
 
-    def get_inputs(self, env: BluelockEnvironment, offender_id: int, defender_id: int):
-        offender, defender = env.get_player(offender_id), env.get_player(defender_id)
-        dx, dy = offender.position - defender.position
-        vx, vy = defender.speed * defender.tilt
-        rect = Rect([0.0, 0.0], height=env.height, width=env.width)
-        inputs = [dx, dy, vx, vy]
-        for point in rect.get_vertices():
-            pdx, pdy = np.array(point) - offender.position
-            inputs.append(pdx)
-            inputs.append(pdy)
-        return inputs
-
     def compute_fitness(self, genomes, config):
         defender_id = -1
         episodes = 10
@@ -94,24 +102,3 @@ class HoldBall(SequentialEvolutionTask):
                     elapsed += dt
 
                 genome.fitness += elapsed
-
-        if self.should_visualize():
-            dt = 7
-            id, genome = max(genomes, key=lambda g: g[1].fitness)
-            net = neat.nn.FeedForwardNetwork.create(genome, self.config)
-            for factory in factories:
-                env = self.with_controls(factory(id, defender_id), id, defender_id, net)
-                vis = BluelockEnvironmentVisualizer(env)
-                elapsed = 0
-                while (
-                    elapsed < alotted
-                    and not env.get_player(defender_id).has_possession()
-                ):
-                    env.update(dt)
-                    vis.draw()
-                    elapsed += dt
-
-        self.compute_fitness_call_count += 1
-
-    def should_visualize(self):
-        return self.compute_fitness_call_count % 10 == 0

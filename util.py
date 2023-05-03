@@ -51,6 +51,17 @@ def get_random_point(x_max: float, y_max: float, x_min: float = 0, y_min: float 
     return get_random_within_range(x_max, x_min), get_random_within_range(y_max, y_min)
 
 
+def get_fscore(tp, fp, fn):
+    precision = recall = 0
+    if tp + fp > 0:
+        precision = tp / (tp + fp)
+    if tp + fn > 0:
+        recall = tp / (tp + fn)
+    if precision + recall == 0:
+        return 0
+    return 2 * precision * recall / (precision + recall)
+
+
 # todo: remove this if this is not useful
 def can_circle_rect_intersect(a: Circle, b: Rect):
     is_center_x_in_bounds = (

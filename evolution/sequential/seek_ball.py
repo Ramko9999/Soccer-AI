@@ -26,11 +26,8 @@ def get_seek_ball_inputs(env: BluelockEnvironment, seeker_id: int):
 def apply_seek(
     env: BluelockEnvironment, seeker_id: int, seeker_model: neat.nn.FeedForwardNetwork
 ):
-    inputs = get_seek_ball_inputs(env, seeker_id)
-    outputs = seeker_model.activate(inputs)
-    orientation = get_beeline_orientation(np.array(outputs))
-    env.get_player(seeker_id).set_rotation(orientation)
-    env.get_player(seeker_id).run()
+    outputs = seeker_model.activate(get_seek_ball_inputs(env, seeker_id))
+    return get_beeline_orientation(np.array(outputs))
 
 
 class SeekBall(SequentialEvolutionTask):
@@ -49,7 +46,8 @@ class SeekBall(SequentialEvolutionTask):
         self, env: BluelockEnvironment, player_id: int, net: neat.nn.FeedForwardNetwork
     ):
         def action(env: BluelockEnvironment, offender: Offender):
-            apply_seek(env, offender.id, net)
+            offender.set_rotation(apply_seek(env, offender.id, net))
+            offender.run()
 
         controls = {}
         controls[player_id] = action

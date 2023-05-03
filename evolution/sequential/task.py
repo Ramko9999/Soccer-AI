@@ -1,7 +1,6 @@
 import neat
 import os
-import evolution.visualize as visualize
-from evolution.util import MostRecentHistoryRecorder
+from evolution.util import MostRecentHistoryRecorder, EvolutionVisualizer
 
 
 class SequentialEvolutionTask:
@@ -40,16 +39,11 @@ class SequentialEvolutionTask:
             return
 
         population.add_reporter(neat.StdOutReporter(True))
-        stats = neat.StatisticsReporter()
-        population.add_reporter(stats)
+        population.add_reporter(EvolutionVisualizer(output_prefix=self.plot_path))
         population.add_reporter(
             MostRecentHistoryRecorder(self.checkpoint_path, self.model_path)
         )
-        winner = population.run(self.compute_fitness, n=generations)
-        visualize.plot_stats(stats, filename=self.plot_path + "_fitness")
-        visualize.draw_net(
-            self.config, winner, fmt="png", filename=self.plot_path + "_net_arch"
-        )
+        population.run(self.compute_fitness, n=generations)
 
     def compute_fitness(self, genomes, config):
         pass

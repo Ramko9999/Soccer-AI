@@ -19,6 +19,7 @@ from util import (
     get_unit_vector,
     get_beeline_orientation,
     get_euclidean_dist,
+    get_fscore,
 )
 
 
@@ -31,8 +32,7 @@ def get_pass_evaluate_inputs(
 
     odx, ody = target.position - passer.position
     ddx, ddy = target.position - defender.position
-    vx, vy = PLAYER_SHOT_SPEED * passer.tilt
-    return [odx, ody, ddx, ddy, vx, vy, BALL_FRICTION]
+    return [odx, ody, ddx, ddy, defender.top_speed, PLAYER_SHOT_SPEED, BALL_FRICTION]
 
 
 def apply_pass_evaluate(
@@ -63,21 +63,18 @@ class PassEvaluate(SequentialEvolutionTask):
     def get_env_factory(self):
         origin = (ENVIRONMENT_WIDTH / 2, ENVIRONMENT_HEIGHT / 2)
         pass_zone_radius = 200
-        passer_pos = (
-            pass_zone_radius
-            * get_unit_vector(get_random_within_range(math.pi, -math.pi))
-            + origin
-        )
+        passer_angle = get_random_within_range(math.pi, -math.pi)
+        passer_pos = pass_zone_radius * get_unit_vector(passer_angle) + origin
         target_pos = (
             pass_zone_radius
-            * get_unit_vector(get_random_within_range(math.pi, -math.pi))
+            * get_unit_vector(
+                passer_angle
+                + math.pi
+                + get_random_within_range(7 * math.pi / 12, -7 * math.pi / 12)
+            )
             + origin
         )
-        defender_pos = (
-            get_random_within_range(0, 0)
-            * get_unit_vector(get_random_within_range(math.pi, -math.pi))
-            + origin
-        )
+        defender_pos = origin
 
         def factory(passer_id, target_id, defender_id):
             passer = Offender(passer_id, passer_pos)
@@ -102,9 +99,15 @@ class PassEvaluate(SequentialEvolutionTask):
         episodes = 30
         passer_id, target_id, defender_id = 1, 2, 3
         factories = [self.get_env_factory() for _ in range(episodes)]
-        dt, alotted = 15, 2000
+        dt, alotted = 15, 3000
         for _, genome in genomes:
             genome.fitness = 0
+            tp, fp, fn, tn, = (
+                0,
+                0,
+                0,
+                0,
+            )
             net = neat.nn.FeedForwardNetwork.create(genome, config)
             for factory in factories:
                 env = factory(passer_id, target_id, defender_id)
@@ -146,11 +149,15 @@ class PassEvaluate(SequentialEvolutionTask):
 
                 if should_pass:
                     if target.has_possession():
+                        tp += 1
                         genome.fitness += math.sqrt(defender_dist_to_ball)
                     elif defender.has_possession():
-                        genome.fitness -= 2 * math.sqrt(target_dist_to_ball)
+                        fp += 1
+                        genome.fitness -= math.sqrt(target_dist_to_ball)
                 else:
                     if defender.has_possession():
+                        tn += 1
                         genome.fitness += math.sqrt(target_dist_to_ball)
                     elif target.has_possession():
-                        genome.fitness -= 2 * math.sqrt(defender_dist_to_ball)
+                        fn += 1
+                        genome.fitness -= math.sqrt(defender_dist_to_ball)

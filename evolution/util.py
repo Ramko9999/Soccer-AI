@@ -1,7 +1,9 @@
 import random
 import pickle
 import gzip
+import neat
 from environment.core import BluelockEnvironment, Offender
+import evolution.visualize as visualize
 from neat.population import Population
 from neat.reporting import BaseReporter
 from typing import Callable
@@ -39,6 +41,22 @@ class MostRecentHistoryRecorder(BaseReporter):
             )
             random.setstate(random_state)
             return Population(config, (population, species, generation))
+
+
+class EvolutionVisualizer(neat.StatisticsReporter):
+    def __init__(self, output_prefix: str):
+        super().__init__()
+        self.output_prefix = output_prefix
+
+    def post_evaluate(self, config, population, species, best_genome):
+        super().post_evaluate(config, population, species, best_genome)
+        net_image = f"{self.output_prefix}_net"
+        visualize.draw_net(config, best_genome, filename=net_image, fmt="png")
+
+    def end_generation(self, config, population, species_set):
+        super().end_generation(config, population, species_set)
+        fitness_plot = f"{self.output_prefix}_fitness"
+        visualize.plot_stats(self, filename=fitness_plot)
 
 
 OffenseControl = Callable[[BluelockEnvironment, Offender], None]
