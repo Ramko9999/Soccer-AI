@@ -2,9 +2,15 @@ import argparse
 from environment.core import Offender, Defender, Ball
 from environment.config import ENVIRONMENT_HEIGHT, ENVIRONMENT_WIDTH
 from environment.core import BluelockEnvironment
-from environment.defense.policy import naive_man_to_man
-from environment.defense.agent import with_policy_defense
-from evolution.sequential.workflow import evolve_sequential, watch_sequential
+from environment.defense.agent import with_policy_defense, naive_man_to_man
+from evolution.predefined_behavior.keepaway import (
+    evolve_predefined_behavior_keepaway,
+    watch_predefined_behavior_keepaway,
+)
+from evolution.sequential.keepaway import (
+    evolve_sequential_keepaway,
+    watch_sequential_keepaway
+)
 from visualization.visualizer import BluelockEnvironmentVisualizer
 from util import get_random_point
 from enum import Enum
@@ -12,6 +18,7 @@ from enum import Enum
 
 class TrainingStyle(str, Enum):
     SEQUENTIAL = "sequential"
+    PREDEFINED_BEHAVIOR = "predefined"
 
 
 def visualize(namespace: argparse.Namespace):
@@ -29,6 +36,7 @@ def visualize(namespace: argparse.Namespace):
         )
 
     ball = Ball(position=get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT))
+    offenders[0].possess(ball)
 
     env = with_policy_defense(
         BluelockEnvironment(
@@ -47,13 +55,17 @@ def visualize(namespace: argparse.Namespace):
 def train(namespace: argparse.Namespace):
     style: TrainingStyle = namespace.style
     if style == TrainingStyle.SEQUENTIAL:
-        evolve_sequential()
+        evolve_sequential_keepaway()
+    elif style == TrainingStyle.PREDEFINED_BEHAVIOR:
+        evolve_predefined_behavior_keepaway()
 
 
 def watch(namespace: argparse.Namespace):
     style: TrainingStyle = namespace.style
     if style == TrainingStyle.SEQUENTIAL:
-        watch_sequential()
+        watch_sequential_keepaway()
+    elif style == TrainingStyle.PREDEFINED_BEHAVIOR:
+        watch_predefined_behavior_keepaway()
 
 
 if __name__ == "__main__":

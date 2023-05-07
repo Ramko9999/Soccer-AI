@@ -34,12 +34,12 @@ class Player:
         self.speed = 0
         self.ball = None
 
-    def run(self):
-        self.speed = self.top_speed
+    def run(self, magnitude: float = 1):
+        self.speed = self.top_speed * magnitude
 
-    def shoot(self):
+    def shoot(self, speed=PLAYER_SHOT_SPEED):
         if self.ball is not None:
-            self.ball.hit(PLAYER_SHOT_SPEED)
+            self.ball.hit(speed)
 
     def possess(self, ball: "Ball"):
         ball.possessed_by(self)
@@ -66,8 +66,8 @@ class Offender(Player):
 
 
 class Defender(Player):
-    def __init__(self, id: int, position: tuple[int]):
-        super().__init__(id, Team.DEFEND, position, top_speed=PLAYER_DEFENDER_SPEED)
+    def __init__(self, id: int, position: tuple[int], top_speed=PLAYER_DEFENDER_SPEED):
+        super().__init__(id, Team.DEFEND, position, top_speed=top_speed)
 
 
 class Ball:
@@ -126,6 +126,7 @@ class BluelockEnvironment:
         self.offense = offense
         self.defense = defense
         self.ball = ball
+        self.simulation_time = 0
 
     def get_player(self, id: int):
         for offensive_player in self.offense:
@@ -135,6 +136,9 @@ class BluelockEnvironment:
             if defensive_player.id == id:
                 return defensive_player
         return None
+
+    def get_players_by_ids(self, *ids: int):
+        return [self.get_player(id) for id in ids]
 
     def get_players(self):
         return self.offense + self.defense
@@ -174,6 +178,7 @@ class BluelockEnvironment:
             )
 
     def update(self, dt: int):
+        self.simulation_time += dt
         does_defense_have_possession = self.does_defense_have_possession()
         self.ball.update(dt)
         for defensive_player in self.defense:

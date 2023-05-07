@@ -1,3 +1,6 @@
+import os
+
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 import pygame
 from enum import Enum
 from dataclasses import dataclass
@@ -39,6 +42,10 @@ class BluelockEnvironmentVisualizer:
 
     def draw_pitch(self):
         self.screen.fill(Color.PITCH)
+        elapsed_indicator = self.font.render(
+            f"{self.env.simulation_time}", True, Color.WHITE
+        )
+        self.screen.blit(elapsed_indicator, (self.env.width // 2, self.env.height // 2))
 
     def draw_player_tilt_indicator(self, player: Player):
         kit = team_to_kit[player.team]

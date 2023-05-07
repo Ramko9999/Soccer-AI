@@ -1,56 +1,32 @@
 import os
 import neat
-import numpy as np
-from environment.core import BluelockEnvironment, Offender, Defender, Ball
+import math
+from environment.core import BluelockEnvironment, Offender, Defender, Ball, Player
 from environment.config import (
     ENVIRONMENT_HEIGHT,
     ENVIRONMENT_WIDTH,
+    PLAYER_DEFENDER_SPEED,
 )
-from environment.defense.agent import with_policy_defense
-from environment.defense.policy import naive_man_to_man
-from evolution.util import with_offense_controls
+from environment.defense.agent import with_policy_defense, naive_man_to_man
+from evolution.agent import with_sequentially_evolved_offense
 from evolution.sequential.task import SequentialEvolutionTask
-from evolution.sequential.seek_ball import apply_seek
-from evolution.sequential.hold_ball import apply_hold_ball
-from evolution.sequential.pass_evaluate import apply_pass_evaluate
 from evolution.config import CHECKPOINTS_PATH, CONFIGS_PATH, PLOTS_PATH, MODELS_PATH
-from util import (
-    get_random_point,
-    get_random_within_range,
-    get_beeline_orientation,
-    Rect,
-)
-from visualization.visualizer import BluelockEnvironmentVisualizer
+from dataclasses import dataclass
 
 
-def get_find_space_inputs(
-    env: BluelockEnvironment, passer_id: int, defender_id: int, space_finder_id: int
-):
-    passer = env.get_player(passer_id)
-    space_finder = env.get_player(space_finder_id)
-    defender = env.get_player(defender_id)
-
-    dx, dy = space_finder.position - passer.position
-    ddx, ddy = space_finder.position - defender.position
-    rect = Rect([0.0, 0.0], height=env.height, width=env.width)
-    inputs = [dx, dy, ddx, ddy]
-    for point in rect.get_vertices():
-        pdx, pdy = np.array(point) - space_finder.position
-        inputs.append(pdx)
-        inputs.append(pdy)
-    return inputs
+@dataclass
+class FindSpaceEpisodeDataTracker:
+    posession_history: list[int]
 
 
-def apply_find_space(
-    env: BluelockEnvironment,
-    passer_id: int,
-    target_id: int,
-    defender_id: int,
-    find_space_model: neat.nn.FeedForwardNetwork,
-):
-    inputs = get_find_space_inputs(env, passer_id, target_id, defender_id)
-    orientation = get_beeline_orientation(find_space_model.activate(inputs))
-    return orientation
+def attach_possession_tracking(ball: Ball, tracker: FindSpaceEpisodeDataTracker):
+    old_possessed_by = ball.possessed_by
+
+    def new_possessed_by(player: Player):
+        tracker.posession_history.append(player.id)
+        old_possessed_by(player)
+
+    ball.possessed_by = new_possessed_by
 
 
 class FindSpace(SequentialEvolutionTask):
@@ -73,100 +49,58 @@ class FindSpace(SequentialEvolutionTask):
         self.seeker = seeker
         self.holder = holder
         self.pass_evaluator = pass_evaluator
+        self.off1_id, self.off2_id, self.dfn1_id = 1, 2, 3
 
-    def get_env_factory(self):
-        passer_pos = get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT)
-        find_spacer_pos = get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT)
-        defender_pos = get_random_within_range(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT)
+    def fitness_func(self, survival_time_ratio):
+        return math.pow(10000, 1 + survival_time_ratio) / 10000
 
-        def factory(passer_id, find_spacer_id, defender_id):
-            passer = Offender(passer_id, passer_pos)
-            space_finder = Offender(find_spacer_id, find_spacer_pos)
-            defender = Defender(defender_id, defender_pos)
-            ball = Ball(passer_pos)
-            passer.possess(ball)
-
-            return with_policy_defense(
+    def get_episodes_for_eval(self):
+        env_width, env_height = 2 * ENVIRONMENT_WIDTH // 3, 2 * ENVIRONMENT_HEIGHT // 3
+        offense_spawn_locations = [
+            (0, 0),
+            (env_width, 0),
+            (env_width, env_height),
+            (0, env_height),
+        ]
+        positions = []
+        for i in range(len(offense_spawn_locations)):
+            for j in range(len(offense_spawn_locations)):
+                if i != j:
+                    positions.append(
+                        (offense_spawn_locations[i], offense_spawn_locations[j])
+                    )
+        envs = []
+        for off1_pos, off2_pos in positions:
+            off1 = Offender(self.off1_id, off1_pos)
+            off2 = Offender(self.off2_id, off2_pos)
+            dfn1 = Defender(self.dfn1_id, (env_width // 2, env_height // 2))
+            dfn1.top_speed = PLAYER_DEFENDER_SPEED / 2
+            ball = Ball(off1_pos)
+            off1.possess(ball)
+            env = with_policy_defense(
                 BluelockEnvironment(
-                    (ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT),
-                    [passer, space_finder],
-                    [defender],
+                    (env_width, env_height),
+                    [off1, off2],
+                    [dfn1],
                     ball,
                 ),
                 policy=naive_man_to_man,
             )
+            envs.append(env)
+        return envs
 
-        return factory
-
-    def compute_fitness(self, genomes, config):
-        episodes = 5
-        passer_id, find_spacer_id, defender_id = 1, 2, 3
-        factories = [self.get_env_factory() for _ in range(episodes)]
-        dt, alotted = 5, 12000
-        for _, genome in genomes:
-            genome.fitness = 0
+    def compute_fitness(self, genome, config):
+        dt, alotted = 20, 18000
+        fitness = 0
+        episodes = self.get_episodes_for_eval()
+        for env in episodes:
             net = neat.nn.FeedForwardNetwork.create(genome, config)
-            for factory in factories:
-                env = factory(passer_id, find_spacer_id, defender_id)
-                passer, target, defender = (
-                    env.get_player(passer_id),
-                    env.get_player(find_spacer_id),
-                    env.get_player(defender_id),
-                )
-
-                should_seek = [None]
-
-                def action(env: BluelockEnvironment, offender: Offender):
-                    other_offender = list(
-                        filter(lambda o: o.id != offender.id, env.offense)
-                    )[0]
-                    if offender.has_possession():
-                        if should_seek[0] == offender.id:
-                            should_seek[0] = None
-                        confident = apply_pass_evaluate(
-                            env, other_offender.id, defender_id, self.pass_evaluator
-                        )
-                        if confident:
-                            offender.set_rotation(
-                                get_beeline_orientation(
-                                    other_offender.position - offender.position
-                                )
-                            )
-                            offender.shoot()
-                            should_seek[0] = other_offender.id
-                        else:
-                            offender.set_rotation(
-                                apply_hold_ball(
-                                    env, offender.id, defender_id, self.holder
-                                )
-                            )
-                            offender.run()
-                    else:
-                        if should_seek[0] == offender.id:
-                            offender.set_rotation(
-                                apply_seek(env, offender.id, self.seeker)
-                            )
-                            offender.run()
-                        else:
-                            if other_offender.has_possession():
-                                offender.set_rotation(
-                                    apply_find_space(
-                                        env,
-                                        other_offender.id,
-                                        offender.id,
-                                        defender_id,
-                                        net,
-                                    )
-                                )
-                                offender.run()
-
-                controls = {}
-                controls[passer_id] = action
-                controls[find_spacer_id] = action
-                env = with_offense_controls(env, controls)
-                vis = BluelockEnvironmentVisualizer(env)
-                elapsed = 0
-                while elapsed < alotted and not defender.has_possession():
-                    env.update(dt)
-                    vis.draw()
-                    elapsed += dt
+            env, _ = with_sequentially_evolved_offense(
+                env, self.seeker, self.holder, self.pass_evaluator, net
+            )
+            for elapsed in range(0, alotted, dt):
+                if env.get_player(self.dfn1_id).has_possession():
+                    break
+                env.update(dt)
+            fitness += self.fitness_func(elapsed / alotted)
+        return fitness / len(episodes)

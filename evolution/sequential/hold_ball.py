@@ -3,37 +3,18 @@ import numpy as np
 import os
 import math
 from environment.core import BluelockEnvironment, Offender, Defender, Ball
-from environment.config import ENVIRONMENT_HEIGHT, ENVIRONMENT_WIDTH
+from environment.config import (
+    ENVIRONMENT_HEIGHT,
+    ENVIRONMENT_WIDTH,
+    PLAYER_DEFENDER_SPEED,
+)
 from environment.defense.agent import with_policy_defense
 from environment.defense.policy import naive_man_to_man
 from evolution.config import CHECKPOINTS_PATH, MODELS_PATH, CONFIGS_PATH, PLOTS_PATH
 from evolution.util import with_offense_controls
+from evolution.sequential.inputs import apply_hold_ball
 from evolution.sequential.task import SequentialEvolutionTask
-from visualization.visualizer import BluelockEnvironmentVisualizer
-from util import get_unit_vector, get_random_within_range, get_beeline_orientation, Rect
-
-
-def get_hold_ball_inputs(env: BluelockEnvironment, holder_id: int, defender_id: int):
-    offender, defender = env.get_player(holder_id), env.get_player(defender_id)
-    dx, dy = offender.position - defender.position
-    vx, vy = defender.speed * defender.tilt
-    rect = Rect([0.0, 0.0], height=env.height, width=env.width)
-    inputs = [dx, dy, vx, vy]
-    for point in rect.get_vertices():
-        pdx, pdy = np.array(point) - offender.position
-        inputs.append(pdx)
-        inputs.append(pdy)
-    return inputs
-
-
-def apply_hold_ball(
-    env: BluelockEnvironment,
-    holder_id: int,
-    defender_id: int,
-    holder_net: neat.nn.FeedForwardNetwork,
-):
-    outputs = holder_net.activate(get_hold_ball_inputs(env, holder_id, defender_id))
-    return get_beeline_orientation(np.array(outputs))
+from util import get_unit_vector, get_random_within_range, get_random_point
 
 
 class HoldBall(SequentialEvolutionTask):
@@ -55,26 +36,24 @@ class HoldBall(SequentialEvolutionTask):
         net: neat.nn.FeedForwardNetwork,
     ):
         def action(env: BluelockEnvironment, offender: Offender):
-            offender.set_rotation(apply_hold_ball(env, offender.id, defender_id, net))
-            offender.run()
+            orientation, move_confidence = apply_hold_ball(
+                env, offender.id, defender_id, net
+            )
+            if move_confidence > 0:
+                offender.set_rotation(orientation)
+                offender.run()
 
-        controls = {}
-        controls[offender_id] = action
-
-        return with_offense_controls(env, controls)
+        return with_offense_controls(env, [(offender_id, action)])
 
     def get_env_factory(self):
-        env_width, env_height = ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT
-        offender_position = (env_width / 2, env_height / 2)
-        angle = get_random_within_range(-math.pi, math.pi)
-        defender_proximity = 125
-        defender_position = tuple(
-            defender_proximity * get_unit_vector(angle) + np.array(offender_position)
-        )
+        env_width, env_height = ENVIRONMENT_WIDTH / 2, ENVIRONMENT_HEIGHT / 2
+        offender_position = get_random_point(env_width, env_height)
+        defender_position = get_random_point(env_width, env_height)
 
         def factory(offender_id, defender_id):
             offender = Offender(offender_id, offender_position)
             defender = Defender(defender_id, defender_position)
+            defender.top_speed = PLAYER_DEFENDER_SPEED * 0.4
             ball = Ball(offender_position)  # will be possessed by the offender
             env = BluelockEnvironment(
                 (env_width, env_height), [offender], [defender], ball
@@ -86,7 +65,7 @@ class HoldBall(SequentialEvolutionTask):
     def compute_fitness(self, genomes, config):
         defender_id = -1
         episodes = 10
-        dt, alotted = 15, 12000
+        dt, alotted = 25, 12000
         factories = [self.get_env_factory() for _ in range(episodes)]
         for id, genome in genomes:
             genome.fitness = 0
@@ -99,6 +78,15 @@ class HoldBall(SequentialEvolutionTask):
                 elapsed = 0
                 while elapsed < alotted and not defender.has_possession():
                     env.update(dt)
+                    x, y = env.get_player(id).position
+                    size = env.get_player(id).size
+                    if (
+                        x == size
+                        or x == env.width - size
+                        or y == size
+                        or y == env.height - size
+                    ):
+                        break
                     elapsed += dt
 
                 genome.fitness += elapsed

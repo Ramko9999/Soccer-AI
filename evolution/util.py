@@ -1,6 +1,8 @@
+import numpy as np
 import random
 import pickle
 import gzip
+import math
 import neat
 from environment.core import BluelockEnvironment, Offender
 import evolution.visualize as visualize
@@ -59,18 +61,29 @@ class EvolutionVisualizer(neat.StatisticsReporter):
         visualize.plot_stats(self, filename=fitness_plot)
 
 
+def get_keepaway2v1_fitness(survival_time_ratio: float):
+    return math.pow(5, 1 + survival_time_ratio) / 25
+
+
+def scale_to_env_dims(env: BluelockEnvironment, displacement: np.ndarray):
+    return np.array([displacement[0] / env.width, displacement[1] / env.height])
+
+
 OffenseControl = Callable[[BluelockEnvironment, Offender], None]
-OffenseControls = dict[int, OffenseControl]
+OffenseControls = list[tuple[int, OffenseControl]]
 
 
 def with_offense_controls(
     env: BluelockEnvironment, controls: OffenseControls
 ) -> BluelockEnvironment:
+    control_map = {}
+    for id, control in controls:
+        control_map[id] = control
     old_update = env.update
 
     def new_update(*args, **kwargs):
-        for player_id in controls:
-            controls[player_id](env, env.get_player(player_id))
+        for player_id in control_map:
+            control_map[player_id](env, env.get_player(player_id))
         old_update(*args, **kwargs)
 
     env.update = new_update

@@ -3,47 +3,21 @@ import neat
 import math
 from environment.core import BluelockEnvironment, Offender, Defender, Ball
 from environment.config import (
-    PLAYER_SHOT_SPEED,
-    BALL_FRICTION,
     ENVIRONMENT_HEIGHT,
     ENVIRONMENT_WIDTH,
 )
 from environment.defense.agent import with_policy_defense
 from environment.defense.policy import naive_man_to_man
 from evolution.util import with_offense_controls
+from evolution.sequential.inputs import apply_pass_evaluate
 from evolution.sequential.task import SequentialEvolutionTask
-from evolution.sequential.seek_ball import apply_seek
+from evolution.sequential.seek import apply_seek
 from evolution.config import CHECKPOINTS_PATH, CONFIGS_PATH, PLOTS_PATH, MODELS_PATH
 from util import (
-    get_random_within_range,
-    get_unit_vector,
+    get_random_point,
     get_beeline_orientation,
     get_euclidean_dist,
-    get_fscore,
 )
-
-
-def get_pass_evaluate_inputs(
-    env: BluelockEnvironment, target_id: int, defender_id: int
-):
-    passer = env.ball.possessor
-    target = env.get_player(target_id)
-    defender = env.get_player(defender_id)
-
-    odx, ody = target.position - passer.position
-    ddx, ddy = target.position - defender.position
-    return [odx, ody, ddx, ddy, defender.top_speed, PLAYER_SHOT_SPEED, BALL_FRICTION]
-
-
-def apply_pass_evaluate(
-    env: BluelockEnvironment,
-    target_id: int,
-    defender_id: int,
-    pass_eval_model: neat.nn.FeedForwardNetwork,
-):
-    inputs = get_pass_evaluate_inputs(env, target_id, defender_id)
-    confidence = pass_eval_model.activate(inputs)[0]
-    return confidence > 0.5
 
 
 class PassEvaluate(SequentialEvolutionTask):
@@ -61,20 +35,9 @@ class PassEvaluate(SequentialEvolutionTask):
         self.seeker_model = seeker_model
 
     def get_env_factory(self):
-        origin = (ENVIRONMENT_WIDTH / 2, ENVIRONMENT_HEIGHT / 2)
-        pass_zone_radius = 200
-        passer_angle = get_random_within_range(math.pi, -math.pi)
-        passer_pos = pass_zone_radius * get_unit_vector(passer_angle) + origin
-        target_pos = (
-            pass_zone_radius
-            * get_unit_vector(
-                passer_angle
-                + math.pi
-                + get_random_within_range(7 * math.pi / 12, -7 * math.pi / 12)
-            )
-            + origin
-        )
-        defender_pos = origin
+        passer_pos = (ENVIRONMENT_WIDTH / 2, ENVIRONMENT_HEIGHT / 2)
+        target_pos = get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT)
+        defender_pos = get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT)
 
         def factory(passer_id, target_id, defender_id):
             passer = Offender(passer_id, passer_pos)
@@ -96,7 +59,7 @@ class PassEvaluate(SequentialEvolutionTask):
         return factory
 
     def compute_fitness(self, genomes, config):
-        episodes = 30
+        episodes = 20
         passer_id, target_id, defender_id = 1, 2, 3
         factories = [self.get_env_factory() for _ in range(episodes)]
         dt, alotted = 15, 3000
@@ -118,11 +81,12 @@ class PassEvaluate(SequentialEvolutionTask):
                 )
 
                 def action(env: BluelockEnvironment, offender: Offender):
-                    apply_seek(env, offender.id, self.seeker_model)
+                    offender.set_rotation(
+                        apply_seek(env, offender.id, self.seeker_model)
+                    )
+                    offender.run()
 
-                controls = {}
-                controls[target_id] = action
-                env = with_offense_controls(env, controls)
+                env = with_offense_controls(env, [(target_id, action)])
 
                 should_pass = apply_pass_evaluate(env, target_id, defender_id, net)
 
