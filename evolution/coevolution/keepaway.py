@@ -18,10 +18,13 @@ TASK_NAME = "coevolved_keepaway"
 
 class CoevolvedKeepaway(CoevolutionTask):
     def __init__(self, difficulty=0.5, is_dynamic=False):
+        task_name = TASK_NAME
+        if is_dynamic:
+            task_name = f"{TASK_NAME}_dynamic"
         behaviors = ["seek", "pass", "find_space", "pass_evaluate"]
         configs = [get_default_config(f"{behavior}.ini") for behavior in behaviors]
         super().__init__(
-            CHECKPOINTS_PATH, MODELS_PATH, PLOTS_PATH, configs, TASK_NAME, behaviors
+            CHECKPOINTS_PATH, MODELS_PATH, PLOTS_PATH, configs, task_name, behaviors
         )
         self.difficulty = difficulty
         self.is_dynamic = is_dynamic
