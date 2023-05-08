@@ -12,10 +12,9 @@ class EvolutionTask:
         checkpoint_dir: str,
         model_dir: str,
         plot_dir: str,
+        tag: str,
         config: neat.Config,
-        task_name: str,
         cpus: int = multiprocessing.cpu_count(),
-        tag: str | None = None,
     ):
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
@@ -23,14 +22,11 @@ class EvolutionTask:
             os.makedirs(model_dir)
         if not os.path.exists(plot_dir):
             os.makedirs(plot_dir)
-        self.tag = task_name
-        if tag is not None:
-            self.tag = tag
+        self.tag = tag
         self.checkpoint_path = os.path.join(checkpoint_dir, self.tag)
         self.plot_path = os.path.join(plot_dir, self.tag)
         self.model_path = os.path.join(model_dir, self.tag)
         self.config = config
-        self.task_name = task_name
         self.cpus = cpus
         self.seed = self.get_seed()
 
@@ -44,11 +40,11 @@ class EvolutionTask:
 
         if generations <= 0:
             print(
-                f"The desired # of generations have already been reached. Not training {self.task_name}"
+                f"The desired # of generations have already been reached. Not training {self.tag}"
             )
             return
 
-        print(f"Evolving {self.task_name} with {self.cpus} cpus")
+        print(f"Evolving {self.tag} with {self.cpus} cpus")
 
         population.add_reporter(neat.StdOutReporter(True))
         population.add_reporter(EvolutionVisualizer(output_prefix=self.plot_path))

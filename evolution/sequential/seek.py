@@ -10,44 +10,64 @@ from evolution.config import (
     PLOTS_PATH,
 )
 from evolution.task import EvolutionTask
-from evolution.util import  scale_to_env_dims
+from evolution.util import scale_to_env_dims
 from visualization.visualizer import BluelockEnvironmentVisualizer
 from util import (
     get_unit_vector,
     get_beeline_orientation,
     get_euclidean_dist,
     get_random_point,
-    get_random_within_range
+    get_random_within_range,
 )
+
 
 def get_seek_inputs(env: BluelockEnvironment, seeker_id: int):
     ball = env.ball
     seeker = env.get_player(seeker_id)
     displacement_to_ball = scale_to_env_dims(env, ball.position - seeker.position)
     ball_velocity = ball.speed * get_unit_vector(ball.direction)
-    return [displacement_to_ball[0], displacement_to_ball[1], ball_velocity[0], ball_velocity[1]]
+    return [
+        displacement_to_ball[0],
+        displacement_to_ball[1],
+        ball_velocity[0],
+        ball_velocity[1],
+    ]
 
-def get_seek_outputs(env: BluelockEnvironment, seeker: neat.nn.FeedForwardNetwork, seeker_id: int):
+
+def get_seek_outputs(
+    env: BluelockEnvironment, seeker: neat.nn.FeedForwardNetwork, seeker_id: int
+):
     vx, vy = seeker.activate(get_seek_inputs(env, seeker_id))
-    speed_magnitude = math.sqrt(vx**2 + vy**2)/math.sqrt(2)
+    speed_magnitude = math.sqrt(vx**2 + vy**2) / math.sqrt(2)
     orientation = get_beeline_orientation(np.array([vx, vy]))
     return speed_magnitude, orientation
-    
 
-def with_seeker(env: BluelockEnvironment, seeker_net: neat.nn.FeedForwardNetwork, seeker_id: int):
+
+def do_seek(
+    env: BluelockEnvironment, seeker_net: neat.nn.FeedForwardNetwork, seeker_id: int
+):
+    speed_mag, orientation = get_seek_outputs(env, seeker_net, seeker_id)
+    seeker = env.get_player(seeker_id)
+    seeker.set_rotation(orientation)
+    seeker.run(speed_mag)
+
+
+def with_seeker(
+    env: BluelockEnvironment, seeker_net: neat.nn.FeedForwardNetwork, seeker_id: int
+):
     old_update = env.update
 
     def new_update(*args, **kwargs):
-        seeker = env.get_player(seeker_id)
-        speed_magnitude, orientation = get_seek_outputs(env, seeker_net, seeker.id)
-        seeker.set_rotation(orientation)
-        seeker.run(speed_magnitude)
+        do_seek(env, seeker_net, seeker_id)
         old_update(*args, **kwargs)
 
     env.update = new_update
     return env
 
+
 TASK_NAME = "seek"
+
+
 class Seek(EvolutionTask):
     def __init__(self):
         config_file = get_default_config(f"{TASK_NAME}.ini")
@@ -64,7 +84,9 @@ class Seek(EvolutionTask):
                 get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT),
             )
             ball = Ball(get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT))
-            ball.direction = get_random_within_range(math.pi/20, -math.pi/20) + get_beeline_orientation(offender.position - ball.position)
+            ball.direction = get_random_within_range(
+                math.pi / 20, -math.pi / 20
+            ) + get_beeline_orientation(offender.position - ball.position)
             ball.speed = get_random_within_range(1, 0.5) * PLAYER_SHOT_SPEED
             envs.append(
                 BluelockEnvironment(
@@ -102,10 +124,12 @@ class Seek(EvolutionTask):
             fitness += award
         return fitness / len(episodes)
 
+
 def evolve_seek():
     seek = Seek()
     for _ in seek.evolve(100, 100):
         pass
+
 
 def watch_seek():
     seek = Seek()

@@ -4,11 +4,18 @@ import pickle
 import gzip
 import math
 import neat
-from environment.core import BluelockEnvironment, Offender
 import evolution.visualize as visualize
+from environment.config import (
+    ENVIRONMENT_HEIGHT,
+    ENVIRONMENT_WIDTH,
+    PLAYER_DEFENDER_SPEED,
+)
+from environment.core import BluelockEnvironment, Offender, Defender, Ball
+from environment.defense.agent import with_policy_defense, naive_man_to_man
 from neat.population import Population
 from neat.reporting import BaseReporter
 from typing import Callable
+from util import get_random_point
 
 
 class MostRecentHistoryRecorder(BaseReporter):
@@ -63,6 +70,34 @@ class EvolutionVisualizer(neat.StatisticsReporter):
 
 def get_keepaway2v1_fitness(survival_time_ratio: float):
     return math.pow(5, 1 + survival_time_ratio) / 25
+
+
+def get_keepaway2v1_env(
+    difficulty: float,
+    possessor_id=1,
+    offballer_id=2,
+    defender_id=3,
+    defender_pos=(ENVIRONMENT_WIDTH // 2, 0),
+    possessor_pos=(0, ENVIRONMENT_HEIGHT // 2),
+):
+    defender = Defender(
+        defender_id, defender_pos, top_speed=difficulty * PLAYER_DEFENDER_SPEED
+    )
+    possessor = Offender(possessor_id, possessor_pos)
+    offballer = Offender(
+        offballer_id, get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT)
+    )
+    ball = Ball((0, 0))
+    possessor.possess(ball)
+    return with_policy_defense(
+        BluelockEnvironment(
+            dims=(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT),
+            offense=[possessor, offballer],
+            defense=[defender],
+            ball=ball,
+        ),
+        policy=naive_man_to_man,
+    )
 
 
 def scale_to_env_dims(env: BluelockEnvironment, displacement: np.ndarray):

@@ -9,8 +9,9 @@ from evolution.predefined_behavior.keepaway import (
 )
 from evolution.sequential.keepaway import (
     evolve_sequential_keepaway,
-    watch_sequential_keepaway
+    watch_sequential_keepaway,
 )
+from evolution.coevolution.keepaway import coevolve_keepaway, watch_coevolved_keepaway
 from visualization.visualizer import BluelockEnvironmentVisualizer
 from util import get_random_point
 from enum import Enum
@@ -19,6 +20,7 @@ from enum import Enum
 class TrainingStyle(str, Enum):
     SEQUENTIAL = "sequential"
     PREDEFINED_BEHAVIOR = "predefined"
+    COEVOLUTION = "coevolution"
 
 
 def visualize(namespace: argparse.Namespace):
@@ -58,6 +60,8 @@ def train(namespace: argparse.Namespace):
         evolve_sequential_keepaway()
     elif style == TrainingStyle.PREDEFINED_BEHAVIOR:
         evolve_predefined_behavior_keepaway()
+    elif style == TrainingStyle.COEVOLUTION:
+        coevolve_keepaway()
 
 
 def watch(namespace: argparse.Namespace):
@@ -66,6 +70,8 @@ def watch(namespace: argparse.Namespace):
         watch_sequential_keepaway()
     elif style == TrainingStyle.PREDEFINED_BEHAVIOR:
         watch_predefined_behavior_keepaway()
+    elif style == TrainingStyle.COEVOLUTION:
+        watch_coevolved_keepaway()
 
 
 if __name__ == "__main__":

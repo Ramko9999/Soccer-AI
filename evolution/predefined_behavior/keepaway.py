@@ -2,13 +2,8 @@ import numpy as np
 import math
 import neat
 import json
-from environment.config import (
-    ENVIRONMENT_HEIGHT,
-    ENVIRONMENT_WIDTH,
-    PLAYER_DEFENDER_SPEED,
-)
-from environment.core import BluelockEnvironment, Offender, Ball, Defender
-from environment.defense.agent import with_policy_defense, naive_man_to_man
+from environment.config import ENVIRONMENT_HEIGHT, ENVIRONMENT_WIDTH
+from environment.core import BluelockEnvironment, Offender, Ball
 from evolution.task import EvolutionTask
 from evolution.config import (
     CHECKPOINTS_PATH,
@@ -16,9 +11,13 @@ from evolution.config import (
     PLOTS_PATH,
     get_default_config,
 )
-from evolution.util import get_keepaway2v1_fitness, scale_to_env_dims
+from evolution.util import (
+    get_keepaway2v1_fitness,
+    get_keepaway2v1_env,
+    scale_to_env_dims,
+)
 from visualization.visualizer import BluelockEnvironmentVisualizer
-from util import Rect, get_random_point, get_beeline_orientation
+from util import Rect, get_beeline_orientation, get_random_point
 from dataclasses import dataclass
 
 # Predefined Behavior ANN's inputs
@@ -132,59 +131,32 @@ TASK_NAME = "predefined_keepaway"
 
 
 class PredefinedBehaviorKeepaway(EvolutionTask):
-    def __init__(self, inital_difficulty: float = 0.5, is_dynamic: bool = False):
+    def __init__(self, difficulty=0.5, is_dynamic=False):
         tag = TASK_NAME
         if is_dynamic:
             tag = f"{TASK_NAME}_dynamic"
         config_file = get_default_config(f"{TASK_NAME}.ini")
-        super().__init__(
-            CHECKPOINTS_PATH, MODELS_PATH, PLOTS_PATH, config_file, TASK_NAME, tag=tag
-        )
+        super().__init__(CHECKPOINTS_PATH, MODELS_PATH, PLOTS_PATH, tag, config_file)
         self.is_dynamic = is_dynamic
-        self.difficulty = inital_difficulty
+        self.difficulty = difficulty
 
     def get_episodes(self):
         envs = []
         for _ in range(10):
-            defender_pos = (ENVIRONMENT_WIDTH // 2, 0)
-            possessor_pos = (0, ENVIRONMENT_HEIGHT // 2)
             if self.is_dynamic:
-                defender_pos = get_random_point(
-                    x_max=ENVIRONMENT_WIDTH, y_max=ENVIRONMENT_HEIGHT
+                envs.append(
+                    get_keepaway2v1_env(
+                        self.difficulty,
+                        defender_pos=get_random_point(
+                            ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT
+                        ),
+                        possessor_pos=get_random_point(
+                            ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT
+                        ),
+                    )
                 )
-                possessor_pos = get_random_point(
-                    x_max=ENVIRONMENT_WIDTH, y_max=ENVIRONMENT_HEIGHT
-                )
-
-            possessor = Offender(1, possessor_pos)
-            ball = Ball(possessor_pos)
-            possessor.possess(ball)
-
-            envs.append(
-                with_policy_defense(
-                    BluelockEnvironment(
-                        (ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT),
-                        [
-                            possessor,
-                            Offender(
-                                2,
-                                get_random_point(
-                                    x_max=ENVIRONMENT_WIDTH, y_max=ENVIRONMENT_HEIGHT
-                                ),
-                            ),
-                        ],
-                        [
-                            Defender(
-                                3,
-                                defender_pos,
-                                top_speed=self.difficulty * PLAYER_DEFENDER_SPEED,
-                            )
-                        ],
-                        ball,
-                    ),
-                    policy=naive_man_to_man,
-                )
-            )
+            else:
+                envs.append(get_keepaway2v1_env(self.difficulty))
         return envs
 
     def compute_fitness(self, genome, config) -> float:
@@ -207,7 +179,7 @@ def evolve_predefined_behavior_keepaway():
     stats = {"difficulty": {}, "fitness": {}}
     task = PredefinedBehaviorKeepaway(is_dynamic=True)
     eval_count = 0
-    for _, winner in enumerate(task.evolve(150, 5)):
+    for _, winner in enumerate(task.evolve(100, 5)):
         eval_count += 1
         fitness = task.compute_fitness(winner, task.config)
         print(
@@ -222,7 +194,7 @@ def evolve_predefined_behavior_keepaway():
 
 
 def watch_predefined_behavior_keepaway():
-    task = PredefinedBehaviorKeepaway(is_dynamic=True)
+    task = PredefinedBehaviorKeepaway(is_dynamic=False)
     best_passing_lane_creator = task.get_best_model()
     dt = 5
     for env in task.get_episodes():
