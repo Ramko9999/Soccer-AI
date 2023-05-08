@@ -5,6 +5,7 @@ import multiprocessing
 import time
 import pickle
 import gzip
+import sys
 from evolution.util import EvolutionVisualizer
 
 
@@ -53,6 +54,8 @@ class CoevolutionTask:
 
         for generation in range(start_generation, generations):
             self.checkpoint(populations, generation)
+            for tag, population in zip(self.population_tags, populations):
+                print(f"{generation}: {tag} {len(population.population)}")
             start = time.monotonic()
             teams = self.get_teams(populations)
             performances = self.evaluate_teams(teams, self.configs)
@@ -82,29 +85,37 @@ class CoevolutionTask:
             return individuals.pop()
 
         # assumes all the populations have the same size
+        min_pop_size = float("inf")
+        for pop in populations:
+            min_pop_size = min(len(pop.population), min_pop_size)
         pool = {}
         for population_id, population in enumerate(populations):
             pool[population_id] = []
             individuals = population.population
+            count = 0
             for id in individuals:
                 individuals[id].fitness = 0
-                for _ in range(participations):
-                    pool[population_id].append(individuals[id])
+                if count < min_pop_size:
+                    for _ in range(participations):
+                        pool[population_id].append(individuals[id])
+                    count += 1
 
-        total_individuals = len(populations[0].population)
-        total_teams = total_individuals * participations
+
+        total_teams = min_pop_size * participations
         teams = []
         for _ in range(total_teams):
             team = []
             for pop_id in pool:
                 team.append(pick_random_individual(pool[pop_id]))
             teams.append(team)
+    
         return teams
 
     def checkpoint(self, populations: list[neat.Population], generation: int):
         pop_data = []
         for population in populations:
             pop_data.append((population.population, population.config, population.species))
+        
         data = (generation, pop_data, random.getstate())
         with open(self.checkpoint_path, "wb") as f:
             f.write(gzip.compress(pickle.dumps(data)))
