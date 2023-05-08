@@ -177,7 +177,7 @@ class PredefinedBehaviorKeepaway(EvolutionTask):
 
 def evolve_predefined_behavior_keepaway():
     stats = {"difficulty": {}, "fitness": {}}
-    task = PredefinedBehaviorKeepaway(is_dynamic=True)
+    task = PredefinedBehaviorKeepaway(is_dynamic=False)
     eval_count = 0
     for _, winner in enumerate(task.evolve(100, 5)):
         eval_count += 1

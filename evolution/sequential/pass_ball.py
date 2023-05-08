@@ -60,7 +60,11 @@ class Pass(EvolutionTask):
     def __init__(self, seeker: neat.nn.FeedForwardNetwork):
         config_file = get_default_config(f"{TASK_NAME}.ini")
         super().__init__(
-            CHECKPOINTS_PATH, MODELS_PATH, PLOTS_PATH, config_file, TASK_NAME
+            CHECKPOINTS_PATH,
+            MODELS_PATH,
+            PLOTS_PATH,
+            TASK_NAME,
+            config_file,
         )
         self.seeker = seeker
         self.possessor_id = 1
@@ -68,7 +72,7 @@ class Pass(EvolutionTask):
 
     def get_episodes(self) -> list[BluelockEnvironment]:
         envs = []
-        for _ in range(20):
+        for _ in range(40):
             possessor = Offender(
                 self.possessor_id,
                 get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT),
@@ -90,32 +94,40 @@ class Pass(EvolutionTask):
         return envs
 
     def compute_fitness(self, genome, config):
-        dt, allotted = 15, 3000
+        dt, allotted = 15, 6000
         net = neat.nn.FeedForwardNetwork.create(genome, config)
         episodes = self.get_episodes()
         fitness = 0
         for env in episodes:
             env = with_seeker(env, self.seeker, self.offballer_id)
-            offender = env.get_player(self.offballer_id)
-            origin_position = offender.position
+            offender, possessor = env.get_players_by_ids(
+                self.offballer_id, self.possessor_id
+            )
+            offender_pos = offender.position
+            to_possessor_dist = get_euclidean_dist(
+                offender.position, possessor.position
+            )
             make_pass(env, net, self.possessor_id, self.offballer_id)
-            dist_to_ball = float("inf")
-            for _ in range(0, allotted, dt):
+            moving_time = 0
+            for elapsed in range(0, allotted, dt):
                 if offender.has_possession():
                     break
-                dist_to_ball = min(
-                    dist_to_ball,
-                    get_euclidean_dist(env.ball.position, offender.position),
-                )
+                if offender.speed > 0:
+                    moving_time += dt
                 env.update(dt)
 
-            dist_traveled = get_euclidean_dist(offender.position, origin_position)
+            seeker_movement_award = 0.1 / (
+                0.1
+                + (
+                    get_euclidean_dist(offender_pos, offender.position)
+                    / to_possessor_dist
+                )
+            )
             award = 0
-            max_dist_possible = math.sqrt(env.width**2 + env.height**2)
             if offender.has_possession():
-                award = 2 - (dist_traveled / max_dist_possible)
+                award = 1 + seeker_movement_award
             else:
-                award = 1 - (dist_to_ball / max_dist_possible)
+                award = seeker_movement_award
             fitness += award
         return fitness / len(episodes)
 
@@ -135,7 +147,7 @@ def watch_pass():
     for env in pass_task.get_episodes():
         dt, allotted = 5, 6000
         env = with_seeker(env, best_seeker, pass_task.offballer_id)
-        make_pass(env, best_passer)
+        make_pass(env, best_passer, pass_task.possessor_id, pass_task.offballer_id)
         vis = BluelockEnvironmentVisualizer(env)
         for _ in range(0, allotted, dt):
             env.update(dt)

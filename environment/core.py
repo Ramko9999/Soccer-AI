@@ -158,6 +158,12 @@ class BluelockEnvironment:
                 return True
         return False
 
+    def does_offense_have_possession(self):
+        for offender in self.offense:
+            if offender.has_possession():
+                return True
+        return False
+
     def clamp_players(self):
         for player in self.get_players():
             player.position[0] = max(

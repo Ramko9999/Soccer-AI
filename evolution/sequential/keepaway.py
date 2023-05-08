@@ -1,10 +1,30 @@
 import neat
+import json
+from environment.config import ENVIRONMENT_HEIGHT, ENVIRONMENT_WIDTH
 from environment.core import Offender, BluelockEnvironment
-from evolution.sequential.seek import evolve_seek, watch_seek, do_seek
-from evolution.sequential.pass_ball import evolve_pass, watch_pass, make_pass
-from evolution.sequential.find_space import go_to_space
-from evolution.util import scale_to_env_dims
+from evolution.config import (
+    CHECKPOINTS_PATH,
+    MODELS_PATH,
+    PLOTS_PATH,
+    get_default_config,
+)
+from evolution.sequential.seek import evolve_seek, watch_seek, do_seek, Seek
+from evolution.sequential.pass_ball import evolve_pass, watch_pass, make_pass, Pass
+from evolution.sequential.find_space import (
+    evolve_find_space,
+    watch_find_space,
+    go_to_space,
+    FindSpace,
+)
+from evolution.util import (
+    scale_to_env_dims,
+    get_keepaway2v1_env,
+    get_keepaway2v1_fitness,
+    get_random_point,
+)
+from evolution.task import EvolutionTask
 from dataclasses import dataclass
+from visualization.visualizer import BluelockEnvironmentVisualizer
 
 
 def get_pass_evaluate_inputs(
@@ -88,11 +108,131 @@ def with_fully_learned_behaviors(
     return env
 
 
+TASK_NAME = "pass_evaluate"
+
+
+class SequentialKeepaway(EvolutionTask):
+    def __init__(
+        self,
+        seeker: neat.nn.FeedForwardNetwork,
+        passer: neat.nn.FeedForwardNetwork,
+        spacer: neat.nn.FeedForwardNetwork,
+        is_dynamic=False,
+        difficulty=0.5,
+    ):
+        tag = TASK_NAME
+        if is_dynamic:
+            tag = f"{TASK_NAME}_dynamic"
+        super().__init__(
+            CHECKPOINTS_PATH,
+            MODELS_PATH,
+            PLOTS_PATH,
+            tag,
+            get_default_config(f"{TASK_NAME}.ini"),
+        )
+        self.seeker = seeker
+        self.passer = passer
+        self.spacer = spacer
+        self.is_dynamic = is_dynamic
+        self.difficulty = difficulty
+
+    def get_episodes(self):
+        envs = []
+        for _ in range(10):
+            if self.is_dynamic:
+                envs.append(
+                    get_keepaway2v1_env(
+                        self.difficulty,
+                        defender_pos=get_random_point(
+                            ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT
+                        ),
+                        possessor_pos=get_random_point(
+                            ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT
+                        ),
+                    )
+                )
+            else:
+                envs.append(get_keepaway2v1_env(self.difficulty))
+        return envs
+
+    def compute_fitness(self, genome, config) -> float:
+        dt, allotted = 15, 24000
+        fitness = 0
+        net = neat.nn.FeedForwardNetwork.create(genome, config)
+        episodes = self.get_episodes()
+        for env in episodes:
+            env = with_fully_learned_behaviors(
+                env, self.seeker, self.passer, self.spacer, net
+            )
+            for elapsed in range(0, allotted, dt):
+                if env.does_defense_have_possession():
+                    break
+                env.update(dt)
+
+            fitness += get_keepaway2v1_fitness(elapsed / allotted)
+        return fitness / len(episodes)
+
+
+def evolve_pass_evaluator():
+    stats = {"difficulty": {}, "fitness": {}}
+    seek = Seek()
+    pass_ball = Pass(seek.get_best_model())
+    find_space = FindSpace(seek.get_best_model(), pass_ball.get_best_model())
+    task = SequentialKeepaway(
+        seek.get_best_model(),
+        pass_ball.get_best_model(),
+        find_space.get_best_model(),
+        is_dynamic=True,
+    )
+    eval_count = 0
+    for _, winner in enumerate(task.evolve(100, 5)):
+        eval_count += 1
+        fitness = task.compute_fitness(winner, task.config)
+        print(
+            f"{eval_count} test at difficulty {task.difficulty} resulted in fitness of {fitness}"
+        )
+        if fitness > 0.8:
+            task.difficulty += 0.05
+        stats["difficulty"][eval_count] = task.difficulty
+        stats["fitness"][eval_count] = fitness
+        with open(f"sequential_keepaway_dynamic_stats.json", "w") as f:
+            json.dump(stats, f, indent=2, sort_keys=True)
+
+
+def watch_pass_evaluator():
+    seek = Seek()
+    pass_ball = Pass(seek.get_best_model())
+    find_space = FindSpace(seek.get_best_model(), pass_ball.get_best_model())
+    pass_evaluator = SequentialKeepaway(
+        seek.get_best_model(),
+        pass_ball.get_best_model(),
+        find_space.get_best_model(),
+        is_dynamic=True,
+    )
+    dt = 5
+    for env in pass_evaluator.get_episodes():
+        env = with_fully_learned_behaviors(
+            env,
+            seek.get_best_model(),
+            pass_ball.get_best_model(),
+            find_space.get_best_model(),
+            pass_evaluator.get_best_model(),
+        )
+        vis = BluelockEnvironmentVisualizer(env)
+        while not env.does_defense_have_possession():
+            env.update(dt)
+            vis.draw()
+
+
 def evolve_sequential_keepaway():
     evolve_seek()
     evolve_pass()
+    evolve_find_space()
+    evolve_pass_evaluator()
 
 
 def watch_sequential_keepaway():
     # watch_seek()
-    watch_pass()
+    # watch_pass()
+    # watch_find_space()
+    watch_pass_evaluator()

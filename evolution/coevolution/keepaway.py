@@ -58,7 +58,9 @@ class CoevolvedKeepaway(CoevolutionTask):
         episodes = self.get_episodes()
         fitness = 0
         for env in episodes:
-            env = with_fully_learned_behaviors(env, seeker, passer, find_spacer, pass_evaluator)
+            env = with_fully_learned_behaviors(
+                env, seeker, passer, find_spacer, pass_evaluator
+            )
             for elapsed in range(0, allotted, dt):
                 if env.does_defense_have_possession():
                     break
@@ -85,14 +87,16 @@ def coevolve_keepaway():
         with open(f"coevolved_keepaway_stats.json", "w") as f:
             json.dump(stats, f, indent=2, sort_keys=True)
 
+
 def watch_coevolved_keepaway():
     task = CoevolvedKeepaway()
     seeker, passer, find_spacer, pass_evaluator = task.load_best_team()
     dt = 5
     for env in task.get_episodes():
-        env = with_fully_learned_behaviors(env, seeker, passer, find_spacer, pass_evaluator)
+        env = with_fully_learned_behaviors(
+            env, seeker, passer, find_spacer, pass_evaluator
+        )
         vis = BluelockEnvironmentVisualizer(env)
         while not env.does_defense_have_possession():
             env.update(dt)
             vis.draw()
-

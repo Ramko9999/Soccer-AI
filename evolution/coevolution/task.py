@@ -67,7 +67,9 @@ class CoevolutionTask:
                     best_performing_team, best_performance = team, performance
 
             self.save_best_team(best_performing_team)
-            print(f"Fitness evaluation for {generation} generation finished in {round(time.monotonic() - start, 2)}s")
+            print(
+                f"Fitness evaluation for {generation} generation finished in {round(time.monotonic() - start, 2)}s"
+            )
             print(
                 f"The best performing team of {generation} has fitness {best_performance}"
             )
@@ -100,7 +102,6 @@ class CoevolutionTask:
                         pool[population_id].append(individuals[id])
                     count += 1
 
-
         total_teams = min_pop_size * participations
         teams = []
         for _ in range(total_teams):
@@ -108,18 +109,20 @@ class CoevolutionTask:
             for pop_id in pool:
                 team.append(pick_random_individual(pool[pop_id]))
             teams.append(team)
-    
+
         return teams
 
     def checkpoint(self, populations: list[neat.Population], generation: int):
         pop_data = []
         for population in populations:
-            pop_data.append((population.population, population.config, population.species))
-        
+            pop_data.append(
+                (population.population, population.config, population.species)
+            )
+
         data = (generation, pop_data, random.getstate())
         with open(self.checkpoint_path, "wb") as f:
             f.write(gzip.compress(pickle.dumps(data)))
-        
+
     def load_checkpoint(self):
         with open(self.checkpoint_path, "rb") as f:
             generation, pop_data, random_state = pickle.loads(gzip.decompress(f.read()))

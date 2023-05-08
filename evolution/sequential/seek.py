@@ -72,13 +72,17 @@ class Seek(EvolutionTask):
     def __init__(self):
         config_file = get_default_config(f"{TASK_NAME}.ini")
         super().__init__(
-            CHECKPOINTS_PATH, MODELS_PATH, PLOTS_PATH, config_file, TASK_NAME
+            CHECKPOINTS_PATH,
+            MODELS_PATH,
+            PLOTS_PATH,
+            TASK_NAME,
+            config_file,
         )
         self.offballer_id = 1
 
     def get_episodes(self) -> list[BluelockEnvironment]:
         envs = []
-        for _ in range(20):
+        for _ in range(40):
             offender = Offender(
                 self.offballer_id,
                 get_random_point(ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT),
@@ -87,7 +91,7 @@ class Seek(EvolutionTask):
             ball.direction = get_random_within_range(
                 math.pi / 20, -math.pi / 20
             ) + get_beeline_orientation(offender.position - ball.position)
-            ball.speed = get_random_within_range(1, 0.5) * PLAYER_SHOT_SPEED
+            ball.speed = PLAYER_SHOT_SPEED
             envs.append(
                 BluelockEnvironment(
                     (ENVIRONMENT_WIDTH, ENVIRONMENT_HEIGHT), [offender], [], ball
@@ -103,24 +107,24 @@ class Seek(EvolutionTask):
         for env in episodes:
             env = with_seeker(env, net, self.offballer_id)
             offender = env.get_player(self.offballer_id)
-            origin_position = offender.position
-            dist_to_ball = float("inf")
-            for _ in range(0, allotted, dt):
+            moving_time = 0
+            for elapsed in range(0, allotted, dt):
                 if offender.has_possession():
                     break
-                dist_to_ball = min(
-                    dist_to_ball,
-                    get_euclidean_dist(env.ball.position, offender.position),
-                )
+                if offender.speed > 0:
+                    moving_time += dt
                 env.update(dt)
 
-            dist_traveled = get_euclidean_dist(offender.position, origin_position)
             award = 0
-            max_dist_possible = math.sqrt(env.width**2 + env.height**2)
             if offender.has_possession():
-                award = 2 - (dist_traveled / max_dist_possible)
+                laziness_bonus = 0.1 / (0.1 + moving_time / elapsed)
+                award = 1 + laziness_bonus
             else:
-                award = 1 - (dist_to_ball / max_dist_possible)
+                max_dist_possible = math.sqrt(env.width**2 + env.height**2)
+                award = 1 - (
+                    get_euclidean_dist(env.ball.position, offender.position)
+                    / max_dist_possible
+                )
             fitness += award
         return fitness / len(episodes)
 
