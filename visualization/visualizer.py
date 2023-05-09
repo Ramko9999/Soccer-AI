@@ -94,13 +94,16 @@ class BluelockEnvironmentVisualizer:
             self.screen, Color.INNER_BALL, tuple(ball_position), ball.size - 2
         )
 
-    def draw(self):
+    def draw(self, vis_image_path: str | None = None):
         self.draw_pitch()
         for player in self.env.get_players():
             self.draw_player(player)
 
         self.draw_ball(self.env.ball)
         pygame.display.flip()
+        if vis_image_path is not None:
+            pygame.image.save(self.screen, vis_image_path)
+
 
     def update(self, dt: int):
         self.env.update(dt)

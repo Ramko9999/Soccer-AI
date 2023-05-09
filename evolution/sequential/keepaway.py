@@ -209,7 +209,7 @@ def watch_pass_evaluator():
         find_space.get_best_model(),
         is_dynamic=True,
     )
-    dt = 5
+    dt = 2
     for env in pass_evaluator.get_episodes():
         env = with_fully_learned_behaviors(
             env,

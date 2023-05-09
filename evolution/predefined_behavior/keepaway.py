@@ -194,12 +194,15 @@ def evolve_predefined_behavior_keepaway():
 
 
 def watch_predefined_behavior_keepaway():
-    task = PredefinedBehaviorKeepaway(is_dynamic=False)
+    task = PredefinedBehaviorKeepaway(is_dynamic=True)
     best_passing_lane_creator = task.get_best_model()
     dt = 5
     for env in task.get_episodes():
         env = with_predefined_pass_seek_behaviors(env, best_passing_lane_creator)
         vis = BluelockEnvironmentVisualizer(env)
         while not env.does_defense_have_possession():
+            image_file_path = None
+            if env.simulation_time % 5000 == 0:
+                image_file_path = f"./predefined_dynamic_{env.simulation_time}.png"
             env.update(dt)
-            vis.draw()
+            vis.draw(vis_image_path=image_file_path)

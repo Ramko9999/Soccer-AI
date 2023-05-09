@@ -89,7 +89,7 @@ def coevolve_keepaway():
 
 
 def watch_coevolved_keepaway():
-    task = CoevolvedKeepaway()
+    task = CoevolvedKeepaway(is_dynamic=True)
     seeker, passer, find_spacer, pass_evaluator = task.load_best_team()
     dt = 5
     for env in task.get_episodes():
@@ -98,5 +98,8 @@ def watch_coevolved_keepaway():
         )
         vis = BluelockEnvironmentVisualizer(env)
         while not env.does_defense_have_possession():
+            image_file_path = None
+            if env.simulation_time % 5000 == 0:
+                image_file_path = f"./coevolved_dynamic_{env.simulation_time}.png"
             env.update(dt)
-            vis.draw()
+            vis.draw(image_file_path)
